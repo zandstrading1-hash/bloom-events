@@ -1,0 +1,10 @@
+# Local setup notes and machine-specific files
+SETUP-GUIDE.md
+.env
+.env.*
+!.env.example
+Thumbs.db
+Desktop.ini
+.DS_Store
+__pycache__/
+*.log
