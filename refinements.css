@@ -536,5 +536,7 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   .policy-section { break-inside: avoid; }
 }
 
-/* Event screenshots: fill the gallery tiles; the viewer retains the complete photo. */
-.portfolio-event-photo img { object-fit: cover; object-position: center; }
+/* Keep each backdrop's complete outline visible, including its upper edge. */
+.portfolio-event-photo { background: #f5f4f1; }
+.portfolio-event-photo img { object-fit: contain; object-position: center; }
+.portfolio-card[data-cats="walls"] .portfolio-image:hover img { transform: none; }
