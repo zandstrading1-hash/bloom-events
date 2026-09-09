@@ -86,13 +86,19 @@ section { padding: 6rem 5vw; }
 .film-card h3 { font: 400 1.6rem Arial, Helvetica, sans-serif; }
 .film-card p { font-size: .95rem; color: var(--ink-muted); margin-top: .3rem; }
 .film-direct { color: var(--rose); font-size: .875rem; display: inline-block; margin-top: .5rem; }
-.media-dialog { margin: auto; padding: 3.25rem 4rem 1.5rem; width: min(1050px,95vw); max-height: 95dvh; border: 0; border-radius: 4px; background: var(--surface); color: var(--ink); overflow: auto; }
-.media-dialog::backdrop { background: rgba(22,18,17,.86); }
-.media-dialog figure { display: flex; align-items: center; flex-direction: column; gap: .8rem; }
-.media-dialog img { max-width: 100%; max-height: 73dvh; object-fit: contain; }
-.media-dialog figcaption { font-size: .9rem; text-align: center; }
-.media-dialog button { position: absolute; border: 0; background: var(--surface); color: var(--ink); width: 44px; height: 44px; font-size: 1.6rem; cursor: pointer; display: grid; place-items: center; border-radius: 50%; }
-.media-dialog .lightbox-close { top: .25rem; right: .4rem; }
+html.viewer-open { overflow: hidden; overscroll-behavior: none; }
+.media-dialog { margin: auto; padding: 3.5rem 4rem 3.5rem; width: min(1200px,100%); height: 94vh; height: 94svh; max-width: 100%; max-height: none; border: 0; border-radius: 12px; background: #241c20; color: #fff5f8; overflow: hidden; overscroll-behavior: none; touch-action: pinch-zoom; }
+.media-dialog::backdrop { background: rgba(25,18,22,.97); }
+.media-dialog figure { margin: 0; height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0,1fr) auto; gap: 1rem; }
+.media-dialog img { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.media-dialog figcaption { font-size: .9rem; line-height: 1.5; text-align: center; color: #fff5f8; }
+.media-dialog button { position: absolute; border: 1px solid #6b515e; background: #402f38; color: #fff5f8; width: 44px; height: 44px; font-size: 1.6rem; cursor: pointer; display: grid; place-items: center; border-radius: 50%; z-index: 1; }
+.media-dialog button:hover { background: #75475d; }
+.media-dialog button:focus-visible { outline: 2px solid #f4b5d0; outline-offset: 3px; }
+.media-dialog .lightbox-close { top: .5rem; right: .5rem; }
+.lightbox-position { position: absolute; left: 1rem; top: 1.2rem; font-size: .85rem; color: #f4b5d0; }
+.lightbox-hint, .lightbox-status { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; margin: 0; text-align: center; font-size: .75rem; color: #dcc5cf; }
+.lightbox-status:not(:empty) { background: #241c20; }
 .lightbox-prev { left: .3rem; top: 46%; }
 .lightbox-next { right: .3rem; top: 46%; }
 .contact-options { padding-top: 3rem; padding-bottom: 3rem; }
@@ -178,9 +184,11 @@ footer { padding-left: 5vw; padding-right: 5vw; }
  .image-expand { width: 30px; height: 30px; right: .4rem; bottom: .4rem; }
  .film-grid { grid-template-columns: 1fr; gap: 2.5rem; }
  .film-card video { max-height: 600px; object-fit: contain; }
- .media-dialog { width: 96vw; padding: 3.2rem 2.4rem 1rem; }
- .media-dialog img { max-height: 70dvh; }
- .media-dialog button { width: 36px; height: 44px; }
+ .media-dialog { width: 100%; height: 100vh; height: 100svh; padding: 3.75rem .65rem 6.5rem; border-radius: 0; }
+ .media-dialog .lightbox-prev, .media-dialog .lightbox-next { top: auto; bottom: 2rem; width: 48px; height: 48px; }
+ .media-dialog .lightbox-prev { left: calc(50% - 60px); }
+ .media-dialog .lightbox-next { right: calc(50% - 60px); }
+ .media-dialog .lightbox-hint, .media-dialog .lightbox-status { bottom: .5rem; }
  .contact-options-grid { grid-template-columns: 1fr; }
  .contact-options-grid > * { border-right: 0; border-bottom: 1px solid var(--line); padding: 1.5rem 0; }
  .contact-options-grid > :last-child { border-bottom: 0; }
@@ -527,3 +535,6 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   .policy-review { border: 1px solid #777; }
   .policy-section { break-inside: avoid; }
 }
+
+/* Event screenshots: fill the gallery tiles; the viewer retains the complete photo. */
+.portfolio-event-photo img { object-fit: cover; object-position: center; }

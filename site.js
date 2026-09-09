@@ -36,24 +36,79 @@
 
   const dialog = document.getElementById('lightbox');
   if (dialog && typeof dialog.showModal === 'function') {
-    const image = document.getElementById('lightbox-img');
+    let image = document.getElementById('lightbox-img');
     const caption = document.getElementById('lightbox-caption');
+    const position = document.getElementById('lightbox-position');
+    const status = document.getElementById('lightbox-status');
     const imageLinks = [...document.querySelectorAll('[data-lightbox]')];
     let activeLink;
-    let previousOverflow = '';
+    let opener;
+    let scrollY = 0;
+    let bodyStyles;
+    let request = 0;
+    let gesture;
+    const cache = new Map();
     const visibleLinks = () => imageLinks.filter(link => !link.closest('.portfolio-card').hidden);
-    const showImage = link => {
+    const loadImage = link => {
+      if (!cache.has(link.href)) {
+        const photo = new Image();
+        photo.alt = link.querySelector('img').alt;
+        photo.draggable = false;
+        photo.src = link.href;
+        cache.set(link.href, photo.decode().then(() => photo).catch(error => {
+          cache.delete(link.href);
+          throw error;
+        }));
+      }
+      return cache.get(link.href);
+    };
+    const showImage = async link => {
       activeLink = link;
-      image.src = link.href;
-      image.alt = link.querySelector('img').alt;
-      caption.textContent = link.dataset.caption;
+      const currentRequest = ++request;
+      status.textContent = 'Loading photo…';
+      try {
+        const photo = await loadImage(link);
+        if (currentRequest !== request || !dialog.open) return;
+        // Swap an already decoded image; keep the previous photo during loading.
+        if (photo !== image) {
+          image.removeAttribute('id');
+          photo.id = 'lightbox-img';
+          image.replaceWith(photo);
+          image = photo;
+        }
+        caption.textContent = link.dataset.caption;
+        const visible = visibleLinks();
+        const index = visible.indexOf(link);
+        position.textContent = `${index + 1} / ${visible.length}`;
+        status.textContent = '';
+        for (const offset of [-1, 1]) {
+          loadImage(visible[(index + offset + visible.length) % visible.length]).catch(() => {});
+        }
+      } catch {
+        if (currentRequest === request && dialog.open) status.textContent = 'Photo could not load. Try the arrows again.';
+      }
     };
     const step = direction => { const visible = visibleLinks(); showImage(visible[(visible.indexOf(activeLink) + direction + visible.length) % visible.length]); };
     imageLinks.forEach(link => link.addEventListener('click', e => {
-      e.preventDefault(); showImage(link);
-      previousOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      e.preventDefault();
+      opener = link;
+      scrollY = window.scrollY;
+      bodyStyles = ['position', 'top', 'width', 'overflow'].map(property => [property, document.body.style[property]]);
+      document.documentElement.classList.add('viewer-open');
+      Object.assign(document.body.style, { position: 'fixed', top: `-${scrollY}px`, width: '100%', overflow: 'hidden' });
+      const thumbnail = link.querySelector('img');
+      const preview = new Image();
+      preview.id = 'lightbox-img';
+      preview.alt = thumbnail.alt;
+      preview.draggable = false;
+      preview.src = thumbnail.currentSrc || thumbnail.src;
+      image.removeAttribute('id');
+      image.replaceWith(preview);
+      image = preview;
+      caption.textContent = link.dataset.caption;
+      position.textContent = '';
       dialog.showModal();
+      showImage(link);
       dialog.querySelector('.lightbox-close').focus();
     }));
     dialog.querySelector('.lightbox-close').addEventListener('click', () => dialog.close());
@@ -61,7 +116,27 @@
     dialog.querySelector('.lightbox-next').addEventListener('click', () => step(1));
     dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close(); } });
     dialog.addEventListener('keydown', e => { if (e.key === 'ArrowRight') { e.preventDefault(); step(1); } if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); } });
-    dialog.addEventListener('close', () => { document.body.style.overflow = previousOverflow; activeLink?.focus(); image.removeAttribute('src'); });
+    dialog.addEventListener('wheel', e => { if (!e.ctrlKey) e.preventDefault(); }, { passive: false });
+    dialog.addEventListener('pointerdown', e => {
+      gesture = e.isPrimary && !e.target.closest('button') ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+    });
+    dialog.addEventListener('pointerup', e => {
+      if (!gesture || gesture.id !== e.pointerId) return;
+      const dx = e.clientX - gesture.x;
+      const dy = e.clientY - gesture.y;
+      gesture = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+    });
+    dialog.addEventListener('pointercancel', () => { gesture = null; });
+    dialog.addEventListener('close', () => {
+      ++request;
+      gesture = null;
+      bodyStyles.forEach(([property, value]) => { document.body.style[property] = value; });
+      document.documentElement.classList.remove('viewer-open');
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
+      opener?.focus({ preventScroll: true });
+      status.textContent = '';
+    });
   }
 
   const videos = [...document.querySelectorAll('video')];
