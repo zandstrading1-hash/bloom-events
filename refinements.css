@@ -306,7 +306,6 @@ nav ul a { font-size: .95rem; font-weight: 400; letter-spacing: 0; text-transfor
 .inquire .section-title { max-width: none; }
 .inquire-subtitle { font-size: 1rem; }
 .inquire-form { max-width: 700px; }
-.inquire-form.is-unconfigured, .inquire-inner:has(.is-unconfigured) .form-tiny { display: none; }
 .booking-fallback { background: none; border: 0; padding: .5rem 0; }
 .booking-fallback a { text-underline-offset: 4px; }
 .form-submit:disabled { opacity: .65; cursor: not-allowed; }
@@ -540,3 +539,39 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
 .portfolio-event-photo { background: #f5f4f1; }
 .portfolio-event-photo img { object-fit: contain; object-position: center; }
 .portfolio-card[data-cats="walls"] .portfolio-image:hover img { transform: none; }
+
+/* Detailed event inquiry, using the same soft pink palette as the collection. */
+.inquiry-link { margin-top: 2rem; }
+.contact-page .page-hero { padding-bottom: 2.5rem; }
+.contact-page .contact-options { padding-top: 0; padding-bottom: 2rem; }
+.contact-page .inquire { padding-top: 2rem; }
+.contact-page .inquire-inner { max-width: 900px; }
+.event-inquiry { max-width: none; margin-top: 1.75rem; padding: 2.5rem; box-shadow: none; border-color: #e6cbd4; background: #fffdfd; }
+.inquiry-availability { margin: 1.75rem auto 0; padding: 1rem 1.25rem; border-radius: 10px; background: #f7e5eb; text-align: left; line-height: 1.65; font-size: .95rem; }
+.inquiry-availability a { color: #8e2f53; text-decoration: underline; }
+.form-intro { margin: 0 0 2rem; color: var(--ink-muted); font-size: .9rem; }
+.inquiry-group { min-width: 0; border: 0; padding: 0; margin: 0 0 2rem; }
+.inquiry-group + .inquiry-group { border-top: 1px solid #eddde3; padding-top: 1.5rem; }
+.inquiry-group legend { float: left; width: 100%; padding: 0; margin-bottom: 1.25rem; font: 1.65rem Georgia, serif; color: var(--ink); }
+.inquiry-group legend + * { clear: both; }
+.event-inquiry .form-field { min-width: 0; }
+.event-inquiry .form-field label { letter-spacing: 0; text-transform: none; font-size: .95rem; color: var(--ink); }
+.event-inquiry .form-field input, .event-inquiry .form-field select, .event-inquiry .form-field textarea { min-width: 0; min-height: 48px; border: 1px solid #d8c7ce; border-radius: 8px; padding: .75rem; background-color: white; }
+.event-inquiry .form-field select { padding-right: 2rem; }
+.event-inquiry :is(input, select, textarea):focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; }
+.event-inquiry .checkbox-group { margin-bottom: 1.5rem; gap: .65rem 1.5rem; }
+.event-inquiry .checkbox { font-size: .95rem; min-height: 44px; }
+.event-inquiry .checkbox input { flex-shrink: 0; }
+.event-inquiry .inquiry-privacy { margin-top: .5rem; text-align: left; max-width: none; }
+.event-inquiry .form-submit { margin-top: 1.5rem; }
+@media (max-width: 700px) {
+  .event-inquiry { padding: 1.5rem 1rem; }
+  .inquiry-group legend { font-size: 1.4rem; }
+}
+@media (max-width: 420px) {
+  nav .logo { flex-shrink: 0; }
+  nav .nav-cta { font-size: .75rem; padding: .5rem .65rem; }
+}
+@media (max-width: 360px) {
+  nav .nav-cta { display: none; }
+}

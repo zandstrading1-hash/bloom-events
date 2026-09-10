@@ -148,19 +148,21 @@
   const submit = form.querySelector('[type="submit"]');
   const submitLabel = submit.querySelector('span');
   const key = form.querySelector('[name="access_key"]');
-  const ready = key && key.value.trim() && !key.value.includes('YOUR-');
+  const ready = Boolean(key && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key.value.trim()));
+  const availability = document.getElementById('inquiry-availability');
   const date = form.querySelector('[type="date"]');
   const today = new Date();
   if (date) date.min = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  if (ready) { form.hidden = false; submit.disabled = false; }
+  if (ready) {
+    form.action = 'https://api.web3forms.com/submit';
+    submit.disabled = false;
+    submitLabel.textContent = 'Send inquiry';
+    submit.removeAttribute('aria-describedby');
+    if (availability) availability.hidden = true;
+  }
   if (!ready) {
-    form.classList.add('is-unconfigured');
-    form.querySelectorAll('.form-row').forEach(row => { row.hidden = true; });
     submit.disabled = true;
-    submit.setAttribute('aria-describedby', 'form-status');
-    submitLabel.textContent = 'Online inquiries coming soon';
-    status.className = 'form-status show';
-    status.textContent = 'To check your date or request a quote, please call or text (586) 360-4200.';
+    submitLabel.textContent = 'Online inquiries opening soon';
   }
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -168,6 +170,10 @@
     submit.disabled = true; submitLabel.textContent = 'Sending…';
     status.textContent = ''; status.className = 'form-status';
     const data = new FormData(form);
+    if (data.get('botcheck')) {
+      submit.disabled = false; submitLabel.textContent = 'Send inquiry';
+      return;
+    }
     data.set('services', data.getAll('services').join(', '));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);

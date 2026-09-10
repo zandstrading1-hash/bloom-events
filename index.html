@@ -159,8 +159,8 @@
 </script>
 <link rel="icon" type="image/png" href="bloom-events-icon.png">
 <link rel="stylesheet" href="styles.css?v=20260908-natural2">
-<link rel="stylesheet" href="refinements.css?v=20260908-policies">
-<script src="site.js?v=20260908-policy-forms" defer></script>
+<link rel="stylesheet" href="refinements.css?v=20260909-contact1">
+<script src="site.js?v=20260909-contact1" defer></script>
 </head>
 <body>
 
@@ -191,7 +191,7 @@
     <h1 class="display">Your day,<br><span>in full bloom.</span></h1>
     <p class="hero-tagline">For the bridal shower, the big birthday, and the day you say “I do.” Flower walls and thoughtful little details to make it yours.</p>
     <div class="hero-actions">
-      <a href="gallery.html" class="btn btn-primary">Explore the collection <span aria-hidden="true">↗</span></a>
+      <a href="gallery.html" class="btn btn-primary">Explore the collection</a>
       <a href="contact.html" class="hero-link">Ask about your date</a>
     </div>
     <p class="hero-location">Based in Macomb, Michigan. Celebrating across Metro Detroit.</p>
@@ -269,84 +269,7 @@
       Send us your date, venue and the rentals you’re interested in. We’ll check availability and help with the next steps.
     </p>
 
-    <p class="booking-fallback">For availability, <a href="tel:5863604200">call (586) 360-4200</a> or <a href="sms:+15863604200">send a text</a>.</p>
-    <p class="inquiry-privacy" id="inquiry-privacy">We use the details you share to respond to your event inquiry. Read our <a href="privacy.html">Privacy policy</a> and <a href="booking-policy.html">Booking &amp; cancellation policy</a>. Sending an inquiry does not reserve your date.</p>
-    <form class="inquire-form" id="inquire-form" hidden aria-describedby="inquiry-privacy" action="https://api.web3forms.com/submit" method="POST">
-
-      <!-- Web3Forms hidden fields -->
-      <input type="hidden" name="access_key" value="YOUR-WEB3FORMS-ACCESS-KEY-HERE">
-      <input type="hidden" name="subject" value="New inquiry from Bloom Events website">
-      <input type="hidden" name="from_name" value="Bloom Events Inquiry Form">
-      <input type="checkbox" name="botcheck" style="display:none;" tabindex="-1" autocomplete="off">
-
-      <div class="form-row">
-        <div class="form-field">
-          <label for="name">Your Name <span class="req">*</span></label>
-          <input type="text" id="name" name="name" required autocomplete="name">
-        </div>
-        <div class="form-field">
-          <label for="email">Email <span class="req">*</span></label>
-          <input type="email" id="email" name="email" required autocomplete="email">
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-field">
-          <label for="phone">Phone</label>
-          <input type="tel" id="phone" name="phone" autocomplete="tel">
-        </div>
-        <div class="form-field">
-          <label for="event_date">Event Date <span class="req">*</span></label>
-          <input type="date" id="event_date" name="event_date" required>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-field">
-          <label for="event_type">Event Type</label>
-          <select id="event_type" name="event_type">
-            <option value="">Select one...</option>
-            <option>Wedding</option>
-            <option>Bridal Shower</option>
-            <option>Baby Shower</option>
-            <option>Birthday Party</option>
-            <option>Sweet Sixteen</option>
-            <option>Corporate Event</option>
-            <option>Other Celebration</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label for="guests">Approx. Guest Count</label>
-          <input type="number" id="guests" name="guests" min="1" placeholder="e.g. 75">
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-field full">
-          <span class="field-label" id="services-label">Services You're Interested In</span>
-          <div class="checkbox-group" role="group" aria-labelledby="services-label">
-            <label class="checkbox"><input type="checkbox" name="services" value="Flower Wall"> Flower Wall</label>
-            <label class="checkbox"><input type="checkbox" name="services" value="Bloom Bar"> Bloom Bar</label>
-            <label class="checkbox"><input type="checkbox" name="services" value="Pillar Setting"> Pillar Setting</label>
-            <label class="checkbox"><input type="checkbox" name="services" value="Sweets Cart"> Sweets Cart</label>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-field full">
-          <label for="message">Tell Us About Your Event</label>
-          <textarea id="message" name="message" rows="4" placeholder="Venue, colors, theme, or any details you'd like to share..."></textarea>
-        </div>
-      </div>
-
-      <button type="submit" class="form-submit" disabled>
-        <span>Send Inquiry</span>
-        <span class="arrow">&rarr;</span>
-      </button>
-
-      <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
-    </form>
+    <a href="contact.html#inquire" class="btn btn-primary inquiry-link">Tell us about your event</a>
 
     <p class="form-tiny">
       Prefer to talk? Call or text us anytime at
