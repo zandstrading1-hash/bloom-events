@@ -85,7 +85,7 @@
           loadImage(visible[(index + offset + visible.length) % visible.length]).catch(() => {});
         }
       } catch {
-        if (currentRequest === request && dialog.open) status.textContent = 'Photo could not load. Try the arrows again.';
+        if (currentRequest === request && dialog.open) status.textContent = 'Photo could not load. Try Previous or Next again.';
       }
     };
     const step = direction => { const visible = visibleLinks(); showImage(visible[(visible.indexOf(activeLink) + direction + visible.length) % visible.length]); };

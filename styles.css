@@ -1024,7 +1024,7 @@
     transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
     font-weight: 500;
   }
-  .footer-cta::after { content: '→'; transition: transform 0.3s; }
+  .footer-cta::after { content: none; transition: transform 0.3s; }
   .footer-cta:hover {
     background: var(--rose);
     border-color: var(--rose);
