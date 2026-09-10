@@ -583,3 +583,23 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   .media-dialog .lightbox-next { right: calc(50% - 90px); }
 }
 .footer-cta::after { content: none; }
+
+/* Always-visible mobile navigation: brand above a simple row of page links. */
+@media (max-width: 960px) {
+  nav { position: sticky; top: 0; padding: .75rem 5vw 0; gap: .65rem; }
+  nav .logo { flex-shrink: 0; }
+  nav .nav-cta { display: inline-flex; margin-left: auto; font-size: .8rem; padding: .6rem .85rem; }
+  .js-ready nav #primary-links, nav #primary-links { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); order: 4; width: 100%; gap: 0; padding: .3rem 0 0; margin: 0; border-top: 1px solid #eddde3; }
+  nav #primary-links li { min-width: 0; }
+  nav #primary-links a { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: .6rem .15rem; border: 0; border-bottom: 2px solid transparent; border-radius: 0; font-size: .875rem; white-space: nowrap; }
+  nav #primary-links a[aria-current="page"] { color: var(--rose); border-bottom-color: var(--rose); }
+  nav #primary-links a:hover { background: #f7e5eb; }
+  .hero { padding-top: 3rem; }
+  .page-hero { padding-top: 3rem; }
+  [id] { scroll-margin-top: 140px; }
+}
+@media (max-width: 360px) {
+  nav .logo-word { font-size: 1.05rem; }
+  nav .logo-mark { width: 26px; height: 26px; }
+  nav .nav-cta { font-size: .7rem; padding: .5rem .6rem; }
+}

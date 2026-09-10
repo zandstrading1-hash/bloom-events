@@ -2,21 +2,6 @@
 (() => {
   'use strict';
   document.documentElement.classList.add('js-ready');
-  const menu = document.querySelector('.menu-toggle');
-  const links = document.getElementById('primary-links');
-  if (menu && links) {
-    const closeMenu = () => { menu.setAttribute('aria-expanded', 'false'); links.classList.remove('is-open'); };
-    menu.addEventListener('click', () => {
-      const open = menu.getAttribute('aria-expanded') !== 'true';
-      menu.setAttribute('aria-expanded', String(open));
-      links.classList.toggle('is-open', open);
-    });
-    links.addEventListener('click', e => { if (e.target.closest('a')) closeMenu(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && menu.getAttribute('aria-expanded') === 'true') { closeMenu(); menu.focus(); } });
-    document.addEventListener('click', e => { if (!e.target.closest('nav')) closeMenu(); });
-    window.matchMedia('(min-width: 961px)').addEventListener('change', closeMenu);
-  }
-
   const filters = [...document.querySelectorAll('.gallery-filter')];
   const cards = [...document.querySelectorAll('.portfolio-card')];
   const films = document.getElementById('films');
