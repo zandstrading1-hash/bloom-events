@@ -8,3 +8,13 @@ Desktop.ini
 .DS_Store
 __pycache__/
 *.log
+
+# Design and test tooling
+design/logo/fonts/
+design/logo/fonts2/
+design/logo/fonts3/
+design/logo/out/
+design/logo/symbols.svg
+design/logo/ratios.json
+design/logo/round2.json
+node_modules/
