@@ -16,7 +16,7 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 
 - HTML files contain the website pages.
 - `styles.css` and `refinements.css` contain the styling.
-- `site.js` handles navigation, gallery interactions, and inquiry form availability.
+- `site.js` handles navigation, gallery interactions, rental picks and the booking request.
 - `assets/` contains website-ready photos and videos.
 
 ## Logo files
@@ -31,10 +31,18 @@ The logo is the name itself: "Bloom" with a line-drawn rose standing in for the 
 - `bloom-events-icon.svg` / `.png`: the rose on its own, for spaces too small for the name
 - `bloom-events-favicon.svg` / `.png`, `bloom-events-apple-touch-icon.png`: browser tab and home-screen icons
 
+## Booking
+
+On the Rentals page, visitors tap “Book this” on any flower wall, rental or package. Each item can be picked once (there is one of each wall), and the picks follow them to the Book page (`contact.html`), where they send one request with their date.
+
+- Picks are stored in the visitor’s browser and also carried in the Book link, so they survive if storage is blocked. The list of bookable items lives in `RENTALS` at the top of the picks code in `site.js`; add a matching `data-pick` button in `services.html` for any new item.
+- Until a Web3Forms access key is added to the form in `contact.html`, “Send by text” opens the visitor’s messages app (or email) with the request filled in. With a key, the same button sends the request online.
+- The site does not check availability. The owner confirms each date by reply.
+
 ## Publication status
 
 This repository is a private source backup. It does not publish a live website.
 
-The privacy, terms, booking policy, and accessibility pages are review drafts. Confirm the business identity, contact information, domain, rental terms, and actual data handling before public launch. The inquiry forms remain disabled until a valid form integration is configured.
+The privacy, terms, booking policy, and accessibility pages are review drafts. Confirm the business identity, contact information, domain, rental terms, and actual data handling before public launch. Online sending stays off until a valid form integration is configured; until then, booking requests go out by text or email.
 
 Original supplied media and local review notes are preserved separately and are not included in this repository.

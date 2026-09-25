@@ -127,6 +127,77 @@
   const videos = [...document.querySelectorAll('video')];
   videos.forEach(video => video.addEventListener('play', () => videos.forEach(other => { if (other !== video) other.pause(); })));
 
+  /* Rental picks: each item can be picked once. Kept in localStorage (and the Book link) so they reach the Book page. */
+  const RENTALS = {
+    'ivory-wall': 'Ivory flower wall',
+    'garden-wall': 'Garden flower wall',
+    'pink-ombre-wall': 'Pink ombre wall',
+    'red-rose-wall': 'Red rose wall',
+    'champagne-wall': 'Champagne rose wall',
+    'greenery-wall': 'Greenery wall',
+    'ivory-texture-wall': 'Ivory textured wall',
+    'bloom-bar': 'Bloom bar',
+    'pedestals': 'White pedestals',
+    'sweets-cart': 'Sweets cart',
+    'pkg-sweet-setup': 'The Sweet Setup package',
+    'pkg-bridal-suite': 'The Bridal Suite package',
+    'pkg-full-bloom': 'The Full Bloom package'
+  };
+  const PICKS_KEY = 'bloom-picks';
+  const clean = ids => [...new Set(ids)].filter(id => Object.prototype.hasOwnProperty.call(RENTALS, id));
+  let picks = [];
+  try { picks = clean(JSON.parse(localStorage.getItem(PICKS_KEY) || '[]')); } catch { picks = []; }
+  const fromLink = new URLSearchParams(location.search).get('picks');
+  if (fromLink) picks = clean([...picks, ...fromLink.split(',')]);
+  const store = () => { try { localStorage.setItem(PICKS_KEY, JSON.stringify(picks)); } catch { /* storage blocked: the Book link still carries the picks */ } };
+  const bookHref = () => picks.length ? `contact.html?picks=${picks.join(',')}` : 'contact.html';
+
+  const pickList = document.getElementById('picks-list');
+  const renderPicks = () => {
+    document.querySelectorAll('[data-pick]').forEach(btn => {
+      const on = picks.includes(btn.dataset.pick);
+      btn.setAttribute('aria-pressed', String(on));
+      const card = btn.closest('[data-pick-card]');
+      if (card) card.classList.toggle('is-picked', on);
+    });
+    document.body.classList.toggle('has-picks', picks.length > 0);
+    document.querySelectorAll('.book-bar-link, .nav-cta').forEach(link => { link.href = bookHref(); });
+    const label = document.querySelector('.book-bar-label');
+    const count = document.querySelector('.book-bar-count');
+    if (label) label.textContent = picks.length ? `Book ${picks.length === 1 ? 'your pick' : `your ${picks.length} picks`}` : 'Book now';
+    if (count) { count.hidden = !picks.length; count.textContent = picks.length; }
+    if (pickList) {
+      pickList.replaceChildren(...picks.map(id => {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = RENTALS[id];
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'pick-remove';
+        remove.dataset.remove = id;
+        remove.setAttribute('aria-label', `Remove ${RENTALS[id]}`);
+        remove.textContent = 'Remove';
+        li.append(name, remove);
+        return li;
+      }));
+      const empty = document.getElementById('picks-empty');
+      if (empty) empty.hidden = picks.length > 0;
+      const more = document.getElementById('picks-more');
+      if (more) more.textContent = picks.length ? 'Add more rentals' : 'Browse rentals';
+      const field = document.getElementById('rentals-field');
+      if (field) field.value = picks.map(id => RENTALS[id]).join(', ');
+    }
+  };
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-pick]');
+    const remove = e.target.closest('[data-remove]');
+    if (!btn && !remove) return;
+    const id = btn ? btn.dataset.pick : remove.dataset.remove;
+    picks = picks.includes(id) ? picks.filter(p => p !== id) : (btn ? [...picks, id] : picks);
+    store(); renderPicks();
+  });
+  store(); renderPicks();
+
   const form = document.getElementById('inquire-form');
   if (!form) return;
   const status = document.getElementById('form-status');
@@ -134,32 +205,43 @@
   const submitLabel = submit.querySelector('span');
   const key = form.querySelector('[name="access_key"]');
   const ready = Boolean(key && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key.value.trim()));
-  const availability = document.getElementById('inquiry-availability');
+  const alt = document.getElementById('book-alt');
   const date = form.querySelector('[type="date"]');
   const today = new Date();
   if (date) date.min = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  if (ready) {
-    form.action = 'https://api.web3forms.com/submit';
-    submit.disabled = false;
-    submitLabel.textContent = 'Send inquiry';
-    submit.removeAttribute('aria-describedby');
-    if (availability) availability.hidden = true;
-  }
-  if (!ready) {
-    submit.disabled = true;
-    submitLabel.textContent = 'Online inquiries opening soon';
-  }
+  const idle = ready ? 'Send booking request' : 'Send by text';
+  submitLabel.textContent = idle;
+  if (ready && alt) alt.hidden = true;
+
+  // Without an online form service, the request goes out through the visitor's own text or email app.
+  const summary = () => {
+    const d = new FormData(form);
+    const line = (label, name) => (d.get(name) || '').toString().trim() ? `${label}: ${d.get(name).toString().trim()}` : '';
+    return ['Booking request for Bloom Events',
+      line('Name', 'name'), line('Date', 'event_date'), line('Email', 'email'), line('Phone', 'phone'),
+      line('Celebrating', 'event_type'), line('Guests', 'guests'), line('Venue', 'venue'),
+      picks.length ? `Picks: ${picks.map(id => RENTALS[id]).join(', ')}` : '',
+      line('Notes', 'message')].filter(Boolean).join('\n');
+  };
+  const emailLink = document.getElementById('send-email');
+  if (emailLink) emailLink.addEventListener('click', e => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    location.href = `mailto:hello@bloomevents.com?subject=${encodeURIComponent('Booking request')}&body=${encodeURIComponent(summary())}`;
+  });
+
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!ready || !form.reportValidity() || submit.disabled) return;
-    submit.disabled = true; submitLabel.textContent = 'Sending…';
-    status.textContent = ''; status.className = 'form-status';
-    const data = new FormData(form);
-    if (data.get('botcheck')) {
-      submit.disabled = false; submitLabel.textContent = 'Send inquiry';
+    if (!form.reportValidity() || submit.disabled) return;
+    if (!ready) {
+      location.href = `sms:+15863604200?&body=${encodeURIComponent(summary())}`;
       return;
     }
-    data.set('services', data.getAll('services').join(', '));
+    const data = new FormData(form);
+    if (data.get('botcheck')) return;
+    submit.disabled = true; submitLabel.textContent = 'Sending…';
+    status.textContent = ''; status.className = 'form-status';
+    form.action = 'https://api.web3forms.com/submit';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
@@ -168,13 +250,14 @@
       const result = await response.json();
       if (!result.success) throw new Error('Submission failed');
       status.className = 'form-status show success';
-      status.textContent = 'Thank you! Your inquiry has been received. We’ll be in touch to talk through your event.';
+      status.textContent = 'Thank you! Your request has been sent. We’ll confirm your date and send a quote.';
       form.reset();
+      picks = []; store(); renderPicks();
     } catch {
       status.className = 'form-status show error';
-      status.textContent = 'Your inquiry could not be confirmed. Please try again or call (586) 360-4200.';
+      status.textContent = 'Your request could not be sent. Please try again or call (586) 360-4200.';
     } finally {
-      clearTimeout(timer); submit.disabled = false; submitLabel.textContent = 'Send Inquiry';
+      clearTimeout(timer); submit.disabled = false; submitLabel.textContent = idle;
     }
   });
 })();

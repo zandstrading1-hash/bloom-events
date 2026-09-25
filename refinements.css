@@ -589,7 +589,7 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   nav { position: sticky; top: 0; padding: .75rem 5vw 0; gap: .65rem; }
   nav .logo { flex-shrink: 0; }
   nav .nav-cta { display: inline-flex; margin-left: auto; font-size: .8rem; padding: .6rem .85rem; }
-  .js-ready nav #primary-links, nav #primary-links { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); order: 4; width: 100%; gap: 0; padding: .3rem 0 0; margin: 0; border-top: 1px solid #eddde3; }
+  .js-ready nav #primary-links, nav #primary-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); order: 4; width: 100%; gap: 0; padding: .3rem 0 0; margin: 0; border-top: 1px solid #eddde3; }
   nav #primary-links li { min-width: 0; }
   nav #primary-links a { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: .6rem .15rem; border: 0; border-bottom: 2px solid transparent; border-radius: 0; font-size: .875rem; white-space: nowrap; }
   nav #primary-links a[aria-current="page"] { color: var(--rose); border-bottom-color: var(--rose); }
@@ -630,22 +630,139 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   .real-events-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
 }
 
-/* Phones: keep Call and Text one tap away. */
-.quick-contact { display: none; }
-@media (max-width: 700px) {
-  .quick-contact {
-    display: grid; grid-template-columns: 1fr 1fr; gap: .6rem;
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
-    padding: .6rem 5vw calc(.6rem + env(safe-area-inset-bottom, 0px));
-    background: rgba(255, 250, 249, .96); border-top: 1px solid var(--line);
-    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  }
-  .quick-contact a {
-    display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 46px;
-    border-radius: 999px; font-size: .95rem; text-decoration: none;
-  }
-  .quick-contact a:first-child { background: var(--rose); color: #fff; }
-  .quick-contact a:last-child { background: var(--surface); color: var(--ink); border: 1px solid var(--rose-soft); }
-  body { padding-bottom: calc(4.4rem + env(safe-area-inset-bottom, 0px)); }
-}
 @media (prefers-reduced-motion: reduce) { .real-event img { transition: none; } }
+
+/* ============ Booking: pick rentals, then one Book action ============ */
+.rentals { padding-block: 4.5rem; }
+.rentals + .rentals { padding-top: 1rem; }
+.rentals-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 1.75rem; }
+.rentals-note { margin-top: .6rem; color: var(--ink-muted); max-width: 52ch; }
+.swipe-hint { display: none; font-size: .8125rem; color: var(--ink-muted); white-space: nowrap; }
+
+.wall-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
+.wall-card { position: relative; display: grid; grid-template-rows: auto 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; transition: border-color .2s ease, box-shadow .2s ease; }
+.wall-card img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; background: #f7f7f5; }
+.wall-card-body { display: grid; gap: .3rem; align-content: start; padding: 1rem 1rem 1.1rem; }
+.wall-card h3, .extra-card h3 { font: 400 1.25rem/1.25 var(--heading); letter-spacing: -.02em; color: var(--ink); margin: 0; }
+.wall-card p { font-size: .875rem; color: var(--ink-muted); margin: 0 0 .6rem; }
+.wall-card .pick-btn { align-self: end; }
+.is-picked { border-color: var(--rose); box-shadow: 0 0 0 1px var(--rose); }
+.wall-card.is-picked::after { content: "✓"; position: absolute; top: .7rem; right: .7rem; width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--rose); color: #fff; font-size: 1rem; }
+
+.pick-btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; width: 100%; min-height: 44px; padding: .6rem 1rem; border-radius: 999px; border: 1px solid var(--rose); background: var(--surface); color: var(--rose); font: 500 .9rem Arial, Helvetica, sans-serif; cursor: pointer; transition: background .2s ease, color .2s ease; }
+.pick-btn:hover { background: #fbeef2; }
+.pick-btn:focus-visible { outline: 3px solid var(--rose); outline-offset: 3px; }
+.pick-btn .pick-added { display: none; }
+.pick-btn[aria-pressed="true"] { background: var(--rose); color: #fff; }
+.pick-btn[aria-pressed="true"] .pick-add { display: none; }
+.pick-btn[aria-pressed="true"] .pick-added { display: inline; }
+.pick-btn[aria-pressed="true"] .pick-added::before { content: "✓ "; }
+.pick-btn[aria-pressed="true"] .pick-added::after { content: " · tap to remove"; font-weight: 400; opacity: .85; }
+
+.wall-facts { list-style: none; margin: 1.5rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+.wall-facts li { font-size: .8125rem; padding: .4rem .8rem; border-radius: 999px; background: var(--bg-alt); color: var(--ink); }
+
+.extra-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+.extra-card { display: grid; grid-template-rows: auto auto 1fr auto; gap: .75rem; padding: 1.5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); scroll-margin-top: 140px; }
+.extra-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.extra-price { font-size: .9rem; color: var(--rose); white-space: nowrap; }
+.extra-card > p { margin: 0; color: var(--ink-muted); font-size: .9375rem; }
+.extra-card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .3rem; font-size: .875rem; color: var(--ink); }
+.package .pick-btn { margin-top: 1.5rem; }
+.addons-note { margin-top: .9rem; color: var(--ink-muted); font-size: .9375rem; }
+
+/* The one Book button: a floating pill on desktop once something is picked, a bottom bar on phones. */
+.book-bar { display: none; }
+body.has-picks .book-bar { display: block; position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 90; }
+.book-bar-link { display: inline-flex; align-items: center; justify-content: center; gap: .6rem; min-height: 50px; padding: .75rem 1.4rem; border-radius: 999px; background: var(--rose); color: #fff; text-decoration: none; font: 500 1rem Arial, Helvetica, sans-serif; box-shadow: 0 12px 28px -12px rgba(75, 41, 55, .55); }
+.book-bar-link:hover { background: #8e2f53; }
+.book-bar-link:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.book-bar-count { display: inline-grid; place-items: center; min-width: 1.6rem; height: 1.6rem; padding: 0 .4rem; border-radius: 999px; background: #fff; color: var(--rose); font-size: .85rem; font-weight: 600; }
+.book-bar-count[hidden] { display: none; }
+
+/* Book page */
+.book { padding: 3rem 6vw 4.5rem; }
+.book-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 2.5rem; align-items: start; max-width: 1100px; }
+.picks-panel { position: sticky; top: 7rem; padding: 1.5rem; border-radius: 12px; background: #f7e5eb; display: grid; gap: .9rem; }
+.picks-panel h2 { font: 400 1.6rem/1.2 var(--heading); letter-spacing: -.02em; margin: 0; }
+.picks-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.picks-list li { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .6rem .6rem .6rem .9rem; background: var(--surface); border-radius: 8px; font-size: .9375rem; }
+.pick-remove { min-height: 36px; padding: .3rem .75rem; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--ink-muted); font-size: .8125rem; cursor: pointer; }
+.pick-remove:hover, .pick-remove:focus-visible { color: var(--rose); border-color: var(--rose); outline: none; }
+.picks-empty { margin: 0; color: var(--ink); font-size: .9375rem; }
+.picks-panel .text-link { justify-self: start; }
+.book-form { display: grid; gap: 1.1rem; padding: 2rem; border: 1px solid #e6cbd4; border-radius: 12px; background: #fffdfd; }
+.book-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin: 0; }
+.book-form .form-field label { letter-spacing: 0; text-transform: none; font-size: .95rem; font-weight: 500; color: var(--ink); margin: 0; }
+.book-form .form-field input, .book-form .form-field select, .book-form .form-field textarea { margin: 0; }
+/* already on the Book page: no need for the Book button */
+.contact-page .book-bar, body.contact-page.has-picks .book-bar { display: none; }
+.book-form .form-field { display: grid; gap: .4rem; min-width: 0; }
+.book-form input, .book-form select, .book-form textarea { width: 100%; min-height: 48px; padding: .7rem .85rem; border: 1px solid #dcc3cd; border-radius: 8px; background: #fff; color: var(--ink); font: 1rem Arial, Helvetica, sans-serif; }
+.book-form textarea { min-height: 0; resize: vertical; }
+.book-form input:focus-visible, .book-form select:focus-visible, .book-form textarea:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; border-color: var(--rose); }
+.book-form .inquiry-privacy { margin: 0; max-width: none; }
+.book-form .form-submit { width: 100%; min-height: 52px; border: 0; cursor: pointer; font-size: 1rem; }
+.book-alt { margin: -.3rem 0 0; font-size: .875rem; color: var(--ink-muted); text-align: center; }
+.book-alt a { color: var(--rose); }
+.book-phone { margin: 2rem auto 0; text-align: center; color: var(--ink-muted); font-size: .9375rem; }
+.book-phone a { color: var(--ink); }
+
+@media (max-width: 1100px) {
+  .wall-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .extra-grid { grid-template-columns: 1fr; }
+  .book-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  .picks-panel { position: static; }
+}
+
+/* ============ Phones ============ */
+@media (max-width: 700px) {
+  /* one Book button, always within reach */
+  nav .nav-cta { display: none; }
+  .book-bar, body.has-picks .book-bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; padding: .6rem 5vw calc(.6rem + env(safe-area-inset-bottom, 0px)); background: rgba(255, 250, 249, .96); border-top: 1px solid var(--line); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .book-bar-link { width: 100%; box-shadow: none; }
+  body { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom, 0px)); }
+  body.contact-page { padding-bottom: 0; }
+  .contact-page .book-bar, body.contact-page.has-picks .book-bar { display: none; }
+
+  /* lighter header */
+  nav { padding: .7rem 5vw 0; }
+  nav #primary-links a { font-size: .9rem; min-height: 44px; }
+
+  /* calmer spacing */
+  section, .services-section, #process, .inquire, .collection-preview, .real-events { padding-block: 3.25rem; }
+  .page-hero { padding: 2.25rem 5vw 2rem; }
+  .page-hero h1 { font-size: clamp(2.3rem, 10vw, 2.9rem); }
+  .page-hero-subtitle { font-size: 1rem; margin-top: .75rem; }
+  .section-title { font-size: clamp(2rem, 8.5vw, 2.4rem); }
+  .hero-detail-link { display: none; }
+
+  /* swipe rows instead of long stacks */
+  .wall-row, .collection-cards, .packages {
+    display: grid; grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 76%;
+    gap: .9rem; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+    margin-inline: -5vw; padding: .25rem 5vw 1rem; scroll-padding-inline: 5vw; scrollbar-width: none;
+  }
+  .wall-row::-webkit-scrollbar, .collection-cards::-webkit-scrollbar, .packages::-webkit-scrollbar { display: none; }
+  .wall-row > *, .collection-cards > *, .packages > * { scroll-snap-align: start; }
+  .packages { margin-top: 2rem; grid-auto-columns: 84%; }
+  .package { padding: 1.75rem 1.4rem; }
+  .swipe-hint { display: block; }
+  .rentals { padding-block: 3rem; }
+  .rentals-head { margin-bottom: 1.1rem; }
+  .wall-card-body { padding: .85rem .9rem 1rem; }
+
+  /* booking page */
+  .book { padding: 1.5rem 5vw 3rem; }
+  .book-form { padding: 1.25rem; }
+  .book-form .form-row { grid-template-columns: 1fr; gap: 1.1rem; margin: 0; }
+
+  /* shorter footer: two link columns side by side */
+  footer { padding: 3rem 5vw 1.5rem; }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 2rem 1.25rem; padding-bottom: 2rem; }
+  .footer-brand, .footer-grid > .footer-col:last-child { grid-column: 1 / -1; }
+  .footer-col ul li { margin-bottom: .1rem; }
+}
+@media (prefers-reduced-motion: reduce) { .wall-card, .pick-btn { transition: none; } }
