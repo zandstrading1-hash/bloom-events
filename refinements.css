@@ -603,3 +603,13 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
   nav .logo-mark { width: 26px; height: 26px; }
   nav .nav-cta { font-size: .7rem; padding: .5rem .6rem; }
 }
+
+/* Full logo (wordmark with the rose as the "o") in the header and footer. */
+.logo-full { display: block; width: auto; height: 34px; }
+.footer-brand .footer-logo img.footer-logo-full { display: block; width: auto; height: 80px; }
+@media (max-width: 640px) {
+  .logo-full { height: 28px; }
+}
+@media (max-width: 360px) {
+  .logo-full { height: 25px; }
+}
