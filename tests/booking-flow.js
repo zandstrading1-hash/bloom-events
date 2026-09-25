@@ -10,6 +10,8 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
 (async () => {
   const b = await chromium.launch(launchOpts);
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  // Nothing booked, so this flow never depends on real bookings (calendar-flow.js covers booked dates).
+  await ctx.route('**/rest/v1/rpc/booked_items', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   const p = await ctx.newPage();
   const cdp = await ctx.newCDPSession(p); await cdp.send('Page.enable');
   const navs = []; cdp.on('Page.frameRequestedNavigation', e => navs.push(e.url));
@@ -64,6 +66,7 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   assert(items2.filter(t => t === 'Red rose wall').length === 1 && !items2.some(t => /not-a-wall/.test(t)), 'link picks deduped, unknown ignored: ' + items2);
   // desktop: bar hidden until something is picked
   const d = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await d.route('**/rest/v1/rpc/booked_items', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await d.goto(BASE + '/services.html', { waitUntil: 'networkidle' });
   assert(await d.isHidden('.book-bar'), 'desktop: no floating bar with nothing picked');
   await d.click('[data-pick="pink-ombre-wall"]');

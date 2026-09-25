@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Bookings | Bloom Events</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#a83d64">
+
+<link rel="icon" type="image/png" href="bloom-events-favicon.png">
+<link rel="icon" type="image/svg+xml" href="bloom-events-favicon.svg">
+<link rel="apple-touch-icon" href="bloom-events-apple-touch-icon.png">
+
+<link rel="stylesheet" href="styles.css?v=20260908-natural2">
+<link rel="stylesheet" href="refinements.css?v=20260925-calendar">
+<script src="site.js?v=20260925-calendar" defer></script>
+<script src="admin.js?v=20260925-calendar" defer></script>
+</head>
+<body class="admin-page">
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<nav aria-label="Main navigation">
+  <a href="index.html" class="logo" aria-label="Bloom Events home">
+    <img class="logo-full" width="204" height="34" src="bloom-events-logo-inline.svg" alt="Bloom Events">
+  </a>
+</nav>
+
+<main id="main-content" class="admin">
+  <div class="admin-wrap">
+    <h1>Bookings</h1>
+
+    <section class="admin-card" id="sign-in" aria-labelledby="sign-in-title">
+      <h2 id="sign-in-title">Sign in</h2>
+      <form id="code-request" novalidate>
+        <div class="form-field"><label for="admin-email">Email</label><input type="email" id="admin-email" autocomplete="email" required maxlength="254"></div>
+        <button type="submit" class="form-submit"><span>Email me a sign-in code</span></button>
+      </form>
+      <form id="code-verify" novalidate hidden>
+        <p>We sent a code to <strong id="code-email"></strong>. It can take a minute to arrive.</p>
+        <div class="form-field"><label for="admin-code">Code</label><input type="text" id="admin-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" maxlength="10" required></div>
+        <button type="submit" class="form-submit"><span>Sign in</span></button>
+        <button type="button" class="admin-link" id="code-restart">Use a different email or send a new code</button>
+      </form>
+      <p class="admin-status" id="sign-in-status" role="status"></p>
+    </section>
+
+    <section id="bookings" aria-labelledby="bookings-title" hidden>
+      <div class="admin-bar">
+        <p id="bookings-title">Signed in as <strong id="signed-in-email"></strong></p>
+        <button type="button" class="admin-link" id="sign-out">Sign out</button>
+      </div>
+      <p class="admin-status" id="bookings-status" role="status"></p>
+      <p class="admin-card" id="not-admin" hidden>This email isn’t set up to manage bookings yet. Ask whoever looks after the website to add it, then sign in again.</p>
+
+      <div class="admin-grid" id="admin-calendar" hidden>
+        <div class="cal">
+          <div class="cal-head">
+            <button type="button" class="cal-nav" id="admin-prev" aria-label="Previous month">Previous</button>
+            <h2 class="cal-month" id="admin-month" aria-live="polite"></h2>
+            <button type="button" class="cal-nav" id="admin-next" aria-label="Next month">Next</button>
+          </div>
+          <table class="cal-grid" aria-labelledby="admin-month">
+            <thead><tr><th scope="col" abbr="Sunday">Su</th><th scope="col" abbr="Monday">Mo</th><th scope="col" abbr="Tuesday">Tu</th><th scope="col" abbr="Wednesday">We</th><th scope="col" abbr="Thursday">Th</th><th scope="col" abbr="Friday">Fr</th><th scope="col" abbr="Saturday">Sa</th></tr></thead>
+            <tbody id="admin-days"></tbody>
+          </table>
+          <p class="cal-key"><span class="admin-count-key" aria-hidden="true">2</span>Number of items booked that day</p>
+        </div>
+
+        <section class="admin-card day-panel" id="day-panel" aria-labelledby="day-title">
+          <h2 id="day-title">Choose a day</h2>
+          <p id="day-hint">Tap a day to see what’s booked, book items or unbook them.</p>
+          <ul class="day-items" id="day-items" hidden></ul>
+          <form id="book-form" class="day-form" novalidate hidden>
+            <div class="form-field"><label for="booking-customer">Customer name</label><input type="text" id="booking-customer" maxlength="200" autocomplete="off"></div>
+            <div class="form-field"><label for="booking-note">Note <span class="admin-optional">(optional)</span></label><input type="text" id="booking-note" maxlength="2000" autocomplete="off"></div>
+            <button type="submit" class="form-submit"><span>Mark checked items booked</span></button>
+          </form>
+        </section>
+      </div>
+    </section>
+  </div>
+</main>
+
+</body>
+</html>

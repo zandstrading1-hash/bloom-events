@@ -4,8 +4,10 @@
   "description": "Browser checks for the Bloom Events site. Serve the site locally first (see README).",
   "scripts": {
     "booking": "node booking-flow.js",
+    "calendar": "node calendar-flow.js",
+    "admin": "node admin-flow.js",
     "site": "node site-check.js",
-    "test": "node booking-flow.js && node site-check.js"
+    "test": "node booking-flow.js && node calendar-flow.js && node admin-flow.js && node site-check.js"
   },
   "devDependencies": {
     "axe-core": "4.10.3",

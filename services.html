@@ -30,8 +30,8 @@
 <link rel="apple-touch-icon" href="bloom-events-apple-touch-icon.png">
 
 <link rel="stylesheet" href="styles.css?v=20260908-natural2">
-<link rel="stylesheet" href="refinements.css?v=20260925-booking">
-<script src="site.js?v=20260925-booking" defer></script>
+<link rel="stylesheet" href="refinements.css?v=20260925-calendar">
+<script src="site.js?v=20260925-calendar" defer></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -97,7 +97,30 @@
     <div class="page-hero-inner">
       <div class="section-eyebrow">Rentals</div>
       <h1>Pick your pieces</h1>
-      <p class="page-hero-subtitle">Tap “Book this” on anything you like, then send one request with your date. We’ll confirm availability and send you a quote.</p>
+      <p class="page-hero-subtitle">Check your date, tap “Book this” on anything you like, then send one request. We’ll confirm and send you a quote.</p>
+    </div>
+  </section>
+
+  <section class="date-check" id="check-date" aria-labelledby="date-check-title" hidden>
+    <div class="container date-check-grid">
+      <div class="date-check-intro">
+        <h2 class="display section-title" id="date-check-title">Check your date</h2>
+        <p class="rentals-note">Choose your event date to see what’s free. Anything already booked that day is marked below.</p>
+        <p class="date-status" id="date-status" role="status"></p>
+        <button type="button" class="date-clear" id="date-clear" hidden>Clear date</button>
+      </div>
+      <div class="cal" id="date-cal">
+        <div class="cal-head">
+          <button type="button" class="cal-nav" id="cal-prev" aria-label="Previous month">Previous</button>
+          <h3 class="cal-month" id="cal-month" aria-live="polite"></h3>
+          <button type="button" class="cal-nav" id="cal-next" aria-label="Next month">Next</button>
+        </div>
+        <table class="cal-grid" role="grid" aria-labelledby="cal-month">
+          <thead><tr><th scope="col" abbr="Sunday">Su</th><th scope="col" abbr="Monday">Mo</th><th scope="col" abbr="Tuesday">Tu</th><th scope="col" abbr="Wednesday">We</th><th scope="col" abbr="Thursday">Th</th><th scope="col" abbr="Friday">Fr</th><th scope="col" abbr="Saturday">Sa</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="cal-key"><span class="cal-key-swatch" aria-hidden="true"></span>All flower walls booked</p>
+      </div>
     </div>
   </section>
 
@@ -230,8 +253,8 @@
           <button type="button" class="pick-btn" data-pick="pkg-sweet-setup" aria-pressed="false"><span class="pick-add">Book this package</span><span class="pick-added">Added</span></button>
         </div>
 
-        <div class="package featured">
-          <div class="package-tag" data-pick-card="pkg-bridal-suite">Most Popular</div>
+        <div class="package featured" data-pick-card="pkg-bridal-suite">
+          <div class="package-tag">Most Popular</div>
           <h3>The Bridal Suite</h3>
           <p class="pkg-desc">Flower wall plus bloom bar &mdash; the classic shower or wedding combo.</p>
           <div class="package-price">$<span class="it">720</span></div>
