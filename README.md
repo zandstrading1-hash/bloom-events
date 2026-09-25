@@ -1,6 +1,6 @@
 # Bloom Events
 
-Private source repository for the Bloom Events static website, including the current pink design, rental and gallery pages, photos, videos, and policy drafts.
+Source repository for the Bloom Events static website, including the current pink design, rental and gallery pages, photos, videos, and policy drafts.
 
 ## Local preview
 
@@ -52,7 +52,7 @@ Bookings live in a free Supabase project (`dwazctmqkrnajqmswtiy`). The site's ad
 - **Owner page (`admin.html`):** sign in with a code emailed to you, tap a day, check the items to book with the customer's name, or tap Unbook. Only emails listed in `private.admins` can see or change bookings. Supabase's built-in email only delivers to members of the Supabase organization, so an owner email must be a team member there (or set up custom email sending).
 - **Adding an owner email:** in the Supabase SQL editor, run `insert into private.admins (email) values ('name@example.com');` (lowercase).
 - **Adding a new rental:** add it to `RENTALS` in `site.js`, add its `data-pick` button in `services.html`, and add its id to the `item_id` check in `supabase/schema.sql` (then run that file again in the SQL editor). A new package also needs its parts in `PARTS`.
-- **Keeping it awake:** Supabase pauses free projects after about a week with little activity. The `Keep calendar awake` GitHub Action looks up booked dates four times a day. If a lookup fails, the run fails and GitHub emails the repository owner; resume the project from the Supabase dashboard.
+- **Keeping it awake:** Supabase pauses free projects after about a week with little activity. The `Keep calendar awake` GitHub Action looks up booked dates four times a day. If a lookup fails, the run fails and GitHub emails the repository owner; resume the project from the Supabase dashboard. Because this repository is public, GitHub would turn the schedule off after 60 days without commits, so after 45 quiet days the Action commits a dated `.github/keepalive` file.
 
 ## Tests
 
@@ -69,7 +69,7 @@ npm test
 
 ## Publication status
 
-This repository is a private source backup. It does not publish a live website.
+GitHub Pages publishes the `main` branch at https://zandstrading1-hash.github.io/bloom-events/, so anything merged to `main` goes live. The repository is public.
 
 The privacy, terms, booking policy, and accessibility pages are review drafts. Confirm the business identity, contact information, domain, rental terms, and actual data handling before public launch. Online sending stays off until a valid form integration is configured; until then, booking requests go out by text or email.
 
