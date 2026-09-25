@@ -1,0 +1,510 @@
+<title>Bloom Logo Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f7f1f2;
+    --surface: #fffaf9;
+    --text: #3b2330;
+    --muted: #76606c;
+    --line: #e7d5dc;
+    --berry: #a83d64;
+    --plum: #4b2937;
+    --chip: #fff;
+    --display: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+    --body: "Jost", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #160f12;
+      --surface: #21181c;
+      --text: #f4e8ed;
+      --muted: #bba6b0;
+      --line: #3b2b33;
+      --berry: #e07aa0;
+      --chip: #21181c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #160f12;
+    --surface: #21181c;
+    --text: #f4e8ed;
+    --muted: #bba6b0;
+    --line: #3b2b33;
+    --berry: #e07aa0;
+    --chip: #21181c;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font: 400 16px/1.65 var(--body);
+    padding-inline: 20px;
+    padding-block: 0 64px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header.top { padding-block: 56px 28px; display: grid; gap: 18px; }
+  .eyebrow { font: 500 12px/1.2 var(--body); letter-spacing: .22em; text-transform: uppercase; color: var(--berry); margin: 0; }
+  h1 { font: 500 clamp(40px, 6.4vw, 72px)/1.02 var(--display); letter-spacing: -.015em; margin: 0; text-wrap: balance; max-width: 15ch; }
+  h1 em { font-style: italic; color: var(--berry); }
+  .lede { max-width: 60ch; color: var(--muted); margin: 0; font-size: 17px; }
+
+  nav.jump { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 8px 8px; }
+  nav.jump a {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--chip); color: var(--text); text-decoration: none; font-size: 14px;
+  }
+  nav.jump a b { font: 600 16px/1 var(--display); color: var(--berry); }
+  nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--berry); }
+  a:focus-visible { outline: 2px solid var(--berry); outline-offset: 3px; }
+
+  section.dir { padding-block: 56px 8px; border-top: 1px solid var(--line); margin-top: 40px; scroll-margin-top: 16px; }
+  .dir-head { display: grid; grid-template-columns: auto 1fr; gap: 6px 22px; align-items: baseline; margin-bottom: 26px; }
+  .letter { font: 600 clamp(56px, 8vw, 88px)/.8 var(--display); color: var(--berry); grid-row: span 2; }
+  .dir-head h2 { font: 500 clamp(30px, 4vw, 44px)/1.05 var(--display); margin: 0; text-wrap: balance; }
+  .dir-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+  .tile { position: relative; overflow: hidden; display: grid; place-items: center; min-height: 220px; }
+  .tile.hero { grid-column: span 6; min-height: clamp(260px, 42vw, 440px); background: #fffaf9; }
+  .tile.half { grid-column: span 3; aspect-ratio: 4 / 3; }
+  .tile.third { grid-column: span 2; aspect-ratio: 1; }
+  .tile.wide { grid-column: span 6; aspect-ratio: 16 / 9; min-height: 0; }
+  svg.tall { width: auto; height: 76%; }
+  .tile .cap {
+    position: absolute; left: 12px; bottom: 10px; margin: 0;
+    font: 500 11px/1.2 var(--body); letter-spacing: .16em; text-transform: uppercase;
+    padding: 5px 8px; background: rgba(255, 250, 249, .9); color: #4b2937; border-radius: 3px;
+  }
+  .tile .cap.dark { background: rgba(33, 18, 26, .55); color: #fbeef3; }
+  svg.logo { display: block; width: 100%; height: auto; }
+
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; margin-top: 22px; }
+  .notes div { border-top: 1px solid var(--line); padding-top: 12px; }
+  .notes h3 { margin: 0 0 4px; font: 500 12px/1.3 var(--body); letter-spacing: .18em; text-transform: uppercase; color: var(--berry); }
+  .notes p { margin: 0; color: var(--text); max-width: 52ch; }
+
+  /* ---- mockup surfaces (fixed colours: these are physical objects) ---- */
+  .cream { background: #fffaf9; }
+  .blush { background: #f6d8e2; }
+  .berry { background: #a83d64; }
+  .plumbg { background: #3a1f2c; }
+  .photo { background-size: 118%; background-position: center; }
+
+  .card {
+    width: min(78%, 330px); aspect-ratio: 3.5 / 2; border-radius: 6px;
+    display: grid; place-items: center; padding: 8%;
+    box-shadow: 0 1px 1px rgba(40, 10, 25, .12), 0 18px 34px -14px rgba(40, 10, 25, .45);
+    transform: rotate(-4deg);
+  }
+  .card.back { position: absolute; transform: rotate(7deg) translate(18%, 10%); }
+  .card.front { position: relative; transform: rotate(-5deg) translate(-8%, -6%); }
+
+  .avatar {
+    width: min(46%, 170px); aspect-ratio: 1; border-radius: 50%;
+    display: grid; place-items: center; background: #fffaf9;
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #a83d64;
+  }
+  .profile { display: grid; justify-items: center; gap: 10px; text-align: center; }
+  .profile strong { font: 600 15px/1.2 var(--body); color: #3b2330; }
+  .profile span { font-size: 13px; color: #76606c; line-height: 1.35; }
+
+  .sign { filter: drop-shadow(0 2px 1px rgba(60, 20, 40, .25)) drop-shadow(0 14px 18px rgba(60, 20, 40, .35)); }
+
+  .neon-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(10, 30, 10, .15), rgba(0, 15, 0, .45)); }
+  .neon { width: 72%; --ink: #fff3f8; --accent: #ffe1ee; animation: neon-on 2.4s ease-out 0.4s both;
+    filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 5px #ff8fbf) drop-shadow(0 0 14px #ff4f97) drop-shadow(0 0 30px #e3226f); }
+  @keyframes neon-on {
+    0% { opacity: .35; } 8% { opacity: 1; } 12% { opacity: .4; } 18% { opacity: 1; } 22% { opacity: .55; } 30%, 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .neon { animation: none; } }
+
+  .sticker {
+    width: min(58%, 220px); aspect-ratio: 1; border-radius: 50%; background: #fffaf9; padding: 7%;
+    box-shadow: 0 1px 1px rgba(60, 20, 40, .18), 0 10px 22px -8px rgba(60, 20, 40, .45); transform: rotate(-9deg);
+  }
+  .tissue { background:
+      repeating-linear-gradient(115deg, rgba(255, 255, 255, .22) 0 2px, transparent 2px 22px),
+      linear-gradient(160deg, #f3cfdb, #eab9ca); }
+
+  .sizes { display: flex; align-items: flex-end; justify-content: center; gap: 22px; width: 100%; padding: 0 8%; }
+  .sizes figure { margin: 0; display: grid; justify-items: center; gap: 8px; }
+  .sizes figcaption { font: 500 11px/1 var(--body); color: #76606c; font-variant-numeric: tabular-nums; }
+
+  .current { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px; align-items: center; }
+  .current .tile { min-height: 200px; background: #fffaf9; }
+
+  .pick { margin-top: 56px; padding: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; display: grid; gap: 14px; }
+  .pick h2 { font: 500 clamp(28px, 3.6vw, 40px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+  .pick p { margin: 0; max-width: 64ch; }
+  .pick ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 64ch; }
+  .fine { color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 720px) {
+    body { padding-inline: 16px; }
+    header.top { padding-block: 36px 20px; }
+    .tile.half, .tile.third { grid-column: span 6; }
+    .tile.third { aspect-ratio: 4 / 3; }
+    .notes, .current { grid-template-columns: 1fr; }
+    .pick { padding: 22px; }
+    .tile.wide { aspect-ratio: 4 / 3; }
+  }
+
+  .round { display: flex; align-items: baseline; gap: 14px; margin-top: 48px; }
+  .round h2 { font: 500 13px/1.2 var(--body); letter-spacing: .22em; text-transform: uppercase; color: var(--berry); margin: 0; }
+  .round p { margin: 0; color: var(--muted); font-size: 15px; }
+  .round + section.dir { margin-top: 14px; }
+  .night { background: #1d1016; }
+  .chase { animation: chase 1.35s steps(1, end) infinite; }
+  .chase.c1 { animation-delay: .45s; } .chase.c2 { animation-delay: .9s; }
+  @keyframes chase { 0% { opacity: 1; } 33% { opacity: .38; } 66% { opacity: 1; } }
+  .standing { position: absolute; bottom: 9%; filter: drop-shadow(0 18px 14px rgba(40, 10, 25, .45)); }
+  .petal { transform-origin: 50px 50px; animation: petal-open .9s cubic-bezier(.2, .9, .3, 1.15) both; }
+  @keyframes petal-open { from { transform: scale(.15) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .word-in { animation: word-in .8s ease-out 1.1s both; }
+  @keyframes word-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+  .replay { position: absolute; right: 12px; bottom: 10px; font: 500 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase;
+    padding: 8px 12px; border-radius: 999px; border: 1px solid #e3c4cf; background: #fff; color: #4b2937; cursor: pointer; }
+  .replay:hover, .replay:focus-visible { border-color: #a83d64; outline: none; }
+  .appicon { width: 116px; aspect-ratio: 1; border-radius: 23%; background: linear-gradient(160deg, #b84a72, #8e2d55);
+    display: grid; place-items: center; box-shadow: 0 12px 24px -10px rgba(60, 20, 40, .5); }
+  .applabel { font: 500 13px/1 var(--body); color: #fff; margin-top: 10px; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+  .homescreen { background: linear-gradient(170deg, #f3c9d6, #d9a3b8 60%, #b77a93); }
+  .walls { display: grid; gap: 10px; width: 88%; }
+  .walls figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+  .walls figcaption { font: 500 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: #76606c; }
+  .tote { width: min(56%, 230px); position: relative; }
+  .tote .bag { aspect-ratio: .88; background: #f4ece2; border-radius: 3px 3px 8px 8px; display: grid; place-items: center;
+    box-shadow: inset 0 -18px 30px -24px rgba(80, 50, 30, .45), 0 16px 26px -14px rgba(60, 30, 20, .5); }
+  .tote .handle { position: absolute; top: -34%; left: 26%; width: 48%; aspect-ratio: 1; border: 8px solid #cdb697; border-bottom: 0; border-radius: 50% 50% 0 0; clip-path: inset(0 0 50% 0); }
+  .tile.night { background: #1d1016; }
+  .tile.blush { background: #f6d8e2; }
+  .cap.top { top: 10px; bottom: auto; }
+  @media (prefers-reduced-motion: reduce) { .chase, .petal, .word-in { animation: none; } }
+</style>
+
+{{SYMBOLS}}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a6a3a"/>
+      <stop offset=".28" stop-color="#e9cf95"/>
+      <stop offset=".5" stop-color="#b8925a"/>
+      <stop offset=".72" stop-color="#f3dfae"/>
+      <stop offset="1" stop-color="#9c7843"/>
+    </linearGradient>
+    <filter id="bulbglow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="papershadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0.4" dy="1.4" stdDeviation="0.9" flood-color="#3a1522" flood-opacity=".45"/></filter>
+    <filter id="stickershadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#3a1522" flood-opacity=".35"/></filter>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Bloom Events · Logo directions</p>
+    <h1>Eight ways to say <em>Bloom</em></h1>
+    <p class="lede">The rose-in-the-“o” logo is live on the site today. Round 2 is bolder and more playful, round 1 is classic and elegant. Each one is shown where clients would actually see it: on a sign, a card, an Instagram profile, a sticker.</p>
+    <nav class="jump" aria-label="Jump to a direction">
+      <a href="#marquee"><b>E</b> Marquee</a>
+      <a href="#groovy"><b>F</b> Groovy</a>
+      <a href="#paper"><b>G</b> Paper Bloom</a>
+      <a href="#window"><b>H</b> The Window</a>
+      <a href="#backdrop"><b>A</b> The Backdrop</a>
+      <a href="#rings"><b>B</b> The Rings</a>
+      <a href="#signature"><b>C</b> The Signature</a>
+      <a href="#seal"><b>D</b> The Seal</a>
+      <a href="#current">On the site now</a>
+    </nav>
+  </header>
+
+  <div class="round"><h2>Round 2</h2><p>Bolder and more playful</p></div>
+
+  <!-- E -->
+  <section class="dir" id="marquee">
+    <div class="dir-head">
+      <span class="letter">E</span>
+      <h2>Marquee</h2>
+      <p>BLOOM in light-up marquee letters, the kind that stand in front of a flower wall at a party. It says “celebration” from across the room.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero night">{{E_HERO}}</div>
+      <div class="tile third photo" style="background-image:url('pink-ombre-wall-1200.webp');background-size:125%">{{E_WALL}}<p class="cap top">Standing letters at the pink wall</p></div>
+      <div class="tile third cream">{{E_FLAT}}<p class="cap">On light backgrounds</p></div>
+      <div class="tile third night">
+        <div class="profile">
+          <div class="avatar" style="background:#1d1016">{{E_B}}</div>
+          <strong style="color:#fbeef3">bloomevents</strong>
+          <span style="color:#d9c2cc">Flower walls &amp; event rentals<br>Metro Detroit</span>
+        </div>
+        <p class="cap dark">Instagram profile</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>Instantly fun and readable, and the lights can chase on Instagram videos and the website. It looks great on dark backgrounds and at night events.</p></div>
+      <div><h3>Keep in mind</h3><p>People may expect Bloom to rent marquee letters too. That could be a fun add-on, or a reason to choose something else.</p></div>
+    </div>
+  </section>
+
+  <!-- F -->
+  <section class="dir" id="groovy">
+    <div class="dir-head">
+      <span class="letter">F</span>
+      <h2>Groovy</h2>
+      <p>Chunky 70s bubble letters with a stacked shadow and a little daisy. This is the look party brands are using right now, made for birthdays, bridal showers and baby showers.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero blush">{{F_HERO}}</div>
+      <div class="tile third berry">{{F_STICKER}}<p class="cap dark">Die-cut sticker</p></div>
+      <div class="tile third plumbg">{{F_REV}}<p class="cap dark">Reversed</p></div>
+      <div class="tile third cream">
+        <div class="profile">
+          <div class="avatar" style="background:#f6d8e2">{{F_B}}</div>
+          <strong>bloomevents</strong>
+          <span>Flower walls &amp; event rentals<br>Metro Detroit</span>
+        </div>
+        <p class="cap">Instagram profile</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>The most fun of all eight. It looks great on stickers, balloons, cups and party signs, and it stands out in an Instagram feed.</p></div>
+      <div><h3>Keep in mind</h3><p>It’s very on-trend, so it may look dated in a few years. It also leans playful, which may not suit formal weddings.</p></div>
+    </div>
+  </section>
+
+  <!-- G -->
+  <section class="dir" id="paper">
+    <div class="dir-head">
+      <span class="letter">G</span>
+      <h2>Paper Bloom</h2>
+      <p>A rose built from layers of paper petals, deep berry in the middle fading to blush. On screens it opens petal by petal, which makes a great website intro or Instagram reel.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero" id="paper-hero">{{G_HERO}}<button class="replay" type="button" id="replay-bloom">Replay</button></div>
+      <div class="tile half homescreen">
+        <div style="display:grid;justify-items:center"><div class="appicon">{{G_ROSE}}</div><div class="applabel">Bloom Events</div></div>
+        <p class="cap">Phone home screen icon</p>
+      </div>
+      <div class="tile half blush">
+        <div class="card front cream" style="transform:rotate(-3deg)">{{G_CARD}}</div>
+        <p class="cap">Business card</p>
+      </div>
+      <div class="tile third cream" style="grid-column:span 6;aspect-ratio:auto;min-height:200px">{{G_FLAT}}<p class="cap">One-colour version for stamps and embroidery</p></div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>Modern and elegant at the same time, and the only one of the eight that moves on its own. The layered petals echo how a flower wall is built.</p></div>
+      <div><h3>Keep in mind</h3><p>The 3D paper look needs full-colour printing. Stamps, embroidery and one-colour jobs use the flat version shown above.</p></div>
+    </div>
+  </section>
+
+  <!-- H -->
+  <section class="dir" id="window">
+    <div class="dir-head">
+      <span class="letter">H</span>
+      <h2>The Window</h2>
+      <p>Big, bold letters filled with a photo of Bloom’s own flower wall. The logo is a window onto the product, and it can change to match whichever wall a client books.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero">{{H_HERO}}</div>
+      <div class="tile half cream">
+        <div class="walls">
+          <figure>{{H_RED}}<figcaption>Red rose wall</figcaption></figure>
+          <figure>{{H_GREEN}}<figcaption>Greenery wall</figcaption></figure>
+          <figure>{{H_IVORY}}<figcaption>Champagne wall</figcaption></figure>
+        </div>
+        <p class="cap">One logo, every wall</p>
+      </div>
+      <div class="tile half blush">
+        <div class="tote"><div class="handle"></div><div class="bag">{{H_TOTE}}</div></div>
+        <p class="cap">Tote bag</p>
+      </div>
+      <div class="tile third berry" style="grid-column:span 6;aspect-ratio:auto;min-height:200px">{{H_SOLID}}<p class="cap dark">Solid version for one-colour uses</p></div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>Nobody else can have it, because it’s made of Bloom’s own flowers. It stops the scroll on Instagram, and a version per wall makes every post and quote feel matched to the booking.</p></div>
+      <div><h3>Keep in mind</h3><p>Photo letters need to be big to show the flowers, so small uses and one-colour printing switch to the solid version.</p></div>
+    </div>
+  </section>
+
+  <div class="round"><h2>Round 1</h2><p>Classic and elegant</p></div>
+
+  <!-- A -->
+  <section class="dir" id="backdrop">
+    <div class="dir-head">
+      <span class="letter">A</span>
+      <h2>The Backdrop</h2>
+      <p>An arched flower wall with the “B” carved out of it. The arch is the shape of the backdrops Bloom builds, and the texture is made of tiny roses, so the logo is a small version of the product.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero"><svg class="logo" style="width:min(34%,230px)" viewBox="0 0 100 {{H_A}}" role="img" aria-label="Bloom Events logo, direction A"><use href="#logo-a"/></svg></div>
+      <div class="tile half photo" style="background-image:url('champagne-rose-wall-1200.webp')">
+        <svg class="logo sign tall" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg>
+        <p class="cap">Acrylic sign on the champagne wall</p>
+      </div>
+      <div class="tile half blush">
+        <div class="card back berry"><svg class="logo" style="width:34%;--accent:#fffaf9;--tex:#e7aec3;--paper:#a83d64" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg></div>
+        <div class="card front cream"><svg class="logo" style="width:30%" viewBox="0 0 100 {{H_A}}" aria-hidden="true"><use href="#logo-a"/></svg></div>
+        <p class="cap">Business cards</p>
+      </div>
+      <div class="tile third cream">
+        <div class="profile">
+          <div class="avatar"><svg class="logo" style="width:46%" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg></div>
+          <strong>bloomevents</strong>
+          <span>Flower walls &amp; event rentals<br>Metro Detroit</span>
+        </div>
+        <p class="cap">Instagram profile</p>
+      </div>
+      <div class="tile third berry">
+        <svg class="logo tall" style="--ink:#fffaf9;--accent:#fffaf9;--tex:#c96b8d;--paper:#a83d64" viewBox="0 0 100 {{H_A}}" aria-hidden="true"><use href="#logo-a"/></svg>
+        <p class="cap dark">Reversed</p>
+      </div>
+      <div class="tile third cream">
+        <div class="sizes">
+          <figure><svg style="width:72px" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg><figcaption>72 px</figcaption></figure>
+          <figure><svg style="width:36px" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg><figcaption>36 px</figcaption></figure>
+          <figure><svg style="width:18px" viewBox="0 0 100 {{H_AM}}" aria-hidden="true"><use href="#mark-a"/></svg><figcaption>18 px</figcaption></figure>
+        </div>
+        <p class="cap">Small sizes</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>No other event company will have it. It says “flower walls” before anyone reads a word, and the arch alone makes a strong profile picture and favicon.</p></div>
+      <div><h3>Keep in mind</h3><p>The rose texture disappears at tiny sizes and becomes a pink arch with a “B”. That still reads well, but the detail is for signs, cards and print.</p></div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section class="dir" id="rings">
+    <div class="dir-head">
+      <span class="letter">B</span>
+      <h2>The Rings</h2>
+      <p>The two O’s in BLOOM become interlocked wedding rings, with a rose set on top like the stone. At a glance it reads as a fashion-house wordmark, and then people notice the rings.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero"><svg class="logo" style="width:min(70%,620px)" viewBox="0 0 100 {{H_B}}" role="img" aria-label="Bloom Events logo, direction B"><use href="#logo-b"/></svg></div>
+      <div class="tile wide plumbg">
+        <div class="card front" style="background:#4b2937;transform:rotate(-3deg);width:min(62%,420px)"><svg class="logo" style="width:86%;--ink:url(#gold);--accent:#e9a6bf" viewBox="0 0 100 {{H_BW}}" aria-hidden="true"><use href="#word-b"/></svg></div>
+        <p class="cap dark">Gold foil on plum card</p>
+      </div>
+      <div class="tile third cream">
+        <div class="profile">
+          <div class="avatar"><svg class="logo" style="width:60%" viewBox="0 0 100 {{H_BM}}" aria-hidden="true"><use href="#mark-b"/></svg></div>
+          <strong>bloomevents</strong>
+          <span>Flower walls &amp; event rentals<br>Metro Detroit</span>
+        </div>
+        <p class="cap">Instagram profile</p>
+      </div>
+      <div class="tile third berry">
+        <svg class="logo" style="width:min(80%,300px);--ink:#fffaf9;--accent:#fffaf9" viewBox="0 0 100 {{H_B}}" aria-hidden="true"><use href="#logo-b"/></svg>
+        <p class="cap dark">Reversed</p>
+      </div>
+      <div class="tile third cream">
+        <div class="sizes">
+          <figure><svg style="width:72px" viewBox="0 0 100 {{H_BM}}" aria-hidden="true"><use href="#mark-b"/></svg><figcaption>72 px</figcaption></figure>
+          <figure><svg style="width:36px" viewBox="0 0 100 {{H_BM}}" aria-hidden="true"><use href="#mark-b"/></svg><figcaption>36 px</figcaption></figure>
+          <figure><svg style="width:18px" viewBox="0 0 100 {{H_BM}}" aria-hidden="true"><use href="#mark-b"/></svg><figcaption>18 px</figcaption></figure>
+        </div>
+        <p class="cap">Small sizes</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>It’s the most clever of the four and the most luxurious. Gold foil rings on a dark card would feel expensive, and brides will get it immediately.</p></div>
+      <div><h3>Keep in mind</h3><p>Rings say “weddings”. Clients booking a birthday or baby shower might assume Bloom only does weddings.</p></div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section class="dir" id="signature">
+    <div class="dir-head">
+      <span class="letter">C</span>
+      <h2>The Signature</h2>
+      <p>“Bloom” written by hand, with the last stroke of the “m” growing into a rose on a stem. Warm and personal, and made to become a neon sign that hangs on Bloom’s own walls.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero"><svg class="logo" style="width:min(62%,560px)" viewBox="0 0 100 {{H_C}}" role="img" aria-label="Bloom Events logo, direction C"><use href="#logo-c"/></svg></div>
+      <div class="tile wide photo" style="background-image:url('greenery-wall-1200.webp');background-size:130%">
+        <div class="neon-wrap"><svg class="logo neon" style="width:min(58%,560px)" viewBox="0 0 100 {{H_CN}}" aria-hidden="true"><use href="#neon-c"/></svg></div>
+        <p class="cap dark">Neon sign on the greenery wall</p>
+      </div>
+      <div class="tile half berry">
+        <svg class="logo" style="width:min(72%,380px);--ink:#fffaf9;--accent:#f6d8e2" viewBox="0 0 100 {{H_C}}" aria-hidden="true"><use href="#logo-c"/></svg>
+        <p class="cap dark">Reversed</p>
+      </div>
+      <div class="tile half blush">
+        <div class="card front cream" style="transform:rotate(-3deg)"><svg class="logo" style="width:88%" viewBox="0 0 100 {{H_C}}" aria-hidden="true"><use href="#logo-c"/></svg></div>
+        <p class="cap">Business card</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>It feels personal. A neon version is a real product too: it can hang at every event as branding, or be rented out with the walls.</p></div>
+      <div><h3>Keep in mind</h3><p>Script logos are common with event businesses, and handwriting gets hard to read at small sizes. It would need the rose on its own as a profile picture.</p></div>
+    </div>
+  </section>
+
+  <!-- D -->
+  <section class="dir" id="seal">
+    <div class="dir-head">
+      <span class="letter">D</span>
+      <h2>The Seal</h2>
+      <p>A round stamp with the rose at the centre and the name around the edge. Classic and established, made for stickers, rental tags, tissue paper and gift bags.</p>
+    </div>
+    <div class="board">
+      <div class="tile hero"><svg class="logo" style="width:min(40%,300px)" viewBox="0 0 100 100" role="img" aria-label="Bloom Events logo, direction D"><use href="#logo-d"/></svg></div>
+      <div class="tile half tissue">
+        <div class="sticker"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo-d"/></svg></div>
+        <p class="cap">Sticker on tissue paper</p>
+      </div>
+      <div class="tile half berry">
+        <svg class="logo" style="width:min(50%,240px);--ink:#fffaf9;--accent:#fffaf9" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo-d"/></svg>
+        <p class="cap dark">Reversed</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>Why it works</h3><p>Stamped on everything Bloom delivers, it makes a small business look established. It pairs with any of the other directions.</p></div>
+      <div><h3>Keep in mind</h3><p>The lettering gets too small to read under about 60 px, so it works better as a second badge than as the main logo.</p></div>
+    </div>
+  </section>
+
+  <!-- Current -->
+  <section class="dir" id="current">
+    <div class="current">
+      <div>
+        <div class="dir-head" style="grid-template-columns:1fr;margin-bottom:10px"><h2>On the site now</h2></div>
+        <p class="fine" style="font-size:16px;color:var(--muted);max-width:44ch">The rose standing in for the first “o”. Simple, readable at every size, and already in use across the site.</p>
+      </div>
+      <div class="tile"><svg class="logo" style="width:min(62%,340px)" viewBox="0 0 100 {{H_CUR}}" role="img" aria-label="Current Bloom Events logo"><use href="#logo-cur"/></svg></div>
+    </div>
+  </section>
+
+  <section class="pick">
+    <p class="eyebrow">My recommendation</p>
+    <h2>H if she wants heads to turn, A if she wants timeless</h2>
+    <p>The Window is the coolest of the eight and the hardest to copy, because it’s made of Bloom’s own flowers. It will stop people scrolling, and the version-per-wall idea gives every booking its own matching logo. The Backdrop is the classic choice: it will still look right in ten years and works on everything.</p>
+    <ul>
+      <li>For fun and parties, F (Groovy) is the one. For weddings, B (The Rings).</li>
+      <li>G (Paper Bloom) is the best if the website or Instagram reels matter most, because it moves.</li>
+      <li>Mixing is fine. For example, the Window letters for social and the website, with the Paper Bloom rose as the profile picture.</li>
+    </ul>
+    <p class="fine">Pick one, or say what to change, and I’ll make the full set of files and put it on the website. All fonts used are free for commercial use.</p>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('replay-bloom');
+    var hero = document.getElementById('paper-hero');
+    if (!btn || !hero) return;
+    btn.addEventListener('click', function () {
+      hero.querySelectorAll('.petal, .word-in').forEach(function (el) {
+        el.style.animationName = 'none';
+        void el.getBoundingClientRect();
+        el.style.animationName = '';
+      });
+    });
+  })();
+</script>

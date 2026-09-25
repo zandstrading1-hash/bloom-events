@@ -18,6 +18,7 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 - `styles.css` and `refinements.css` contain the styling.
 - `site.js` handles navigation, gallery interactions, rental picks and the booking request.
 - `assets/` contains website-ready photos and videos.
+- `design/` holds the logo generator and logo concepts, `tests/` the browser checks, and `docs/next-steps.md` the open questions and the availability calendar plan. None of these are part of the website; don't deploy them.
 
 ## Logo files
 
@@ -38,6 +39,19 @@ On the Rentals page, visitors tap “Book this” on any flower wall, rental or 
 - Picks are stored in the visitor’s browser and also carried in the Book link, so they survive if storage is blocked. The list of bookable items lives in `RENTALS` at the top of the picks code in `site.js`; add a matching `data-pick` button in `services.html` for any new item.
 - Until a Web3Forms access key is added to the form in `contact.html`, “Send by text” opens the visitor’s messages app (or email) with the request filled in. With a key, the same button sends the request online.
 - The site does not check availability. The owner confirms each date by reply.
+
+## Tests
+
+With the site served locally (see Local preview), run the browser checks from `tests/`:
+
+```sh
+cd tests
+npm install
+npx playwright install chromium   # skip if a Chromium is available; set CHROMIUM_PATH to use it
+npm test
+```
+
+`booking-flow.js` walks through picking rentals and building a booking request; `site-check.js` loads every page at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765.
 
 ## Publication status
 

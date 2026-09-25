@@ -1,0 +1,14 @@
+{
+  "name": "bloom-events-tests",
+  "private": true,
+  "description": "Browser checks for the Bloom Events site. Serve the site locally first (see README).",
+  "scripts": {
+    "booking": "node booking-flow.js",
+    "site": "node site-check.js",
+    "test": "node booking-flow.js && node site-check.js"
+  },
+  "devDependencies": {
+    "axe-core": "4.10.3",
+    "playwright": "1.56.1"
+  }
+}
