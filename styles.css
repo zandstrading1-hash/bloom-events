@@ -1033,7 +1033,7 @@
   }
   .footer-cta:hover::after { transform: translateX(4px); }
 
-  .footer-col h4 {
+  .footer-col h2 {
     font-family: Arial, Helvetica, sans-serif;
     font-weight: 400;
     font-size: 1.1rem;
@@ -1045,7 +1045,7 @@
     padding-bottom: 0.85rem;
     letter-spacing: -0.01em;
   }
-  .footer-col h4::after {
+  .footer-col h2::after {
     content: '';
     position: absolute;
     bottom: 0; left: 0;
