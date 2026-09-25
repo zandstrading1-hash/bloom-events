@@ -370,7 +370,7 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
 .footer-brand p, .footer-col ul a, .footer-col ul li, .footer-contact .value,
 .footer-contact .value a, .footer-contact .value.phone, .footer-contact .label,
 .footer-bottom, .footer-bottom a { color: var(--ink-muted); }
-.footer-col h4 { color: var(--ink); font: 600 .95rem Arial,Helvetica,sans-serif; letter-spacing: 0; text-transform: none; margin-bottom: 1.25rem; }
+.footer-col h2 { color: var(--ink); font: 600 .95rem Arial,Helvetica,sans-serif; letter-spacing: 0; text-transform: none; margin-bottom: 1.25rem; }
 .footer-contact .label { font-size: .8125rem; text-transform: none; letter-spacing: 0; }
 .footer-contact .value.phone { font-size: 1.1rem; }
 .footer-cta { color: var(--ink); border-color: #b77d91; padding: .65rem 1.1rem; }
@@ -613,3 +613,7 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
 @media (max-width: 360px) {
   .logo-full { height: 25px; }
 }
+
+/* Darker text on the deeper pink sections so it meets WCAG AA contrast. */
+#process .section-eyebrow, .contact .section-eyebrow { color: #95345a; }
+#process p, .contact p { color: #66505a; }
