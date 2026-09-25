@@ -617,3 +617,35 @@ footer { background: #f7e5eb; color: var(--ink-muted); padding: 4rem 6vw 2rem; }
 /* Darker text on the deeper pink sections so it meets WCAG AA contrast. */
 #process .section-eyebrow, .contact .section-eyebrow { color: #95345a; }
 #process p, .contact p { color: #66505a; }
+
+/* Homepage: walls set up at real events. */
+.real-events { background: var(--surface); border-bottom: 1px solid var(--line); }
+.real-events-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; margin-top: 2.25rem; }
+.real-event { display: grid; gap: .8rem; color: var(--ink); text-decoration: none; }
+.real-event img { width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 3px; background: var(--rose-pale); transition: transform .5s ease; }
+.real-event:hover img, .real-event:focus-visible img { transform: scale(1.02); }
+.real-event-caption { display: grid; gap: .2rem; font-size: .875rem; line-height: 1.45; color: var(--ink-muted); }
+.real-event-caption strong { font: 400 1.2rem/1.25 var(--heading); letter-spacing: -.02em; color: var(--ink); }
+@media (max-width: 960px) {
+  .real-events-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
+}
+
+/* Phones: keep Call and Text one tap away. */
+.quick-contact { display: none; }
+@media (max-width: 700px) {
+  .quick-contact {
+    display: grid; grid-template-columns: 1fr 1fr; gap: .6rem;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+    padding: .6rem 5vw calc(.6rem + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 250, 249, .96); border-top: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .quick-contact a {
+    display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 46px;
+    border-radius: 999px; font-size: .95rem; text-decoration: none;
+  }
+  .quick-contact a:first-child { background: var(--rose); color: #fff; }
+  .quick-contact a:last-child { background: var(--surface); color: var(--ink); border: 1px solid var(--rose-soft); }
+  body { padding-bottom: calc(4.4rem + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .real-event img { transition: none; } }
