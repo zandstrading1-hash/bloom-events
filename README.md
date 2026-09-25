@@ -21,13 +21,14 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 
 ## Logo files
 
-The logo is a line-drawn rose with a "Bloom Events" wordmark in the site's berry (`#a83d64`) and plum (`#4b2937`). Text is converted to outlines, so no fonts need to be installed (wordmark: Cormorant Garamond SemiBold; "EVENTS": Jost Medium).
+The logo is the name itself: "Bloom" with a line-drawn rose standing in for the first "o", over a ruled "EVENTS" line, in the site's plum (`#4b2937`) and berry (`#a83d64`). Text is converted to outlines, so no fonts need to be installed (wordmark: Cormorant Garamond SemiBold; "EVENTS": Jost Medium).
 
-- `bloom-events-logo.svg` / `.png` / `.pdf`: horizontal logo, transparent background
-- `bloom-events-logo-cream.png`: horizontal logo on the site's cream background
-- `bloom-events-logo-stacked.svg` / `.png`: square layout for social profiles and print
+- `bloom-events-logo.svg` / `.png` / `.pdf`: main logo, transparent background (used in the site footer)
+- `bloom-events-logo-cream.png`: main logo on the site's cream background
 - `bloom-events-logo-reversed.svg` / `.png`: all-cream version for photos and dark or berry backgrounds
-- `bloom-events-icon.svg` / `.png`: rose mark only, used in the site header and footer
+- `bloom-events-logo-stacked.svg` / `.png`: main logo on a square canvas
+- `bloom-events-logo-inline.svg`: one-line version used in the site header
+- `bloom-events-icon.svg` / `.png`: the rose on its own, for spaces too small for the name
 - `bloom-events-favicon.svg` / `.png`, `bloom-events-apple-touch-icon.png`: browser tab and home-screen icons
 
 ## Publication status
