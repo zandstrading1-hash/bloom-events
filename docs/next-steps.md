@@ -13,22 +13,15 @@ These need real answers; nothing on the site should be guessed.
 5. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
 6. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
 
-## Availability calendar (planned, not built)
+## Availability calendar
 
-Goal: the site shows which walls and rentals are already booked on a date, won't let a booked item be requested for that date, and gives the owner a simple page to mark bookings.
+Built: the Rentals page calendar, booked-item blocking on the Rentals and Book pages, the owner page (`admin.html`) and the keep-alive GitHub Action. See the Availability calendar section of the README for how it works and how to add an owner email or a new rental.
 
-**Blocked on:** a Supabase project. Creating "Bloom Events" failed because the connected Supabase account (owner zandstrading1-hash, organization "Greaseboard", free plan) already has the maximum of 2 active free projects; only one of them (Greaseboard) is visible to the connector. Pausing or deleting an unused free project frees a slot. Putting the tables in the Greaseboard project was ruled out to keep the client's data separate.
-
-**Planned design**
-
-- Table `reservations`: `item_id text` (same ids as `RENTALS` in `site.js`), `event_date date`, `customer text`, `note text`, `created_at`. Unique on `(item_id, event_date)` so an item can't be booked twice on one day. RLS on, no public access.
-- Function `booked_items(from_date, to_date)`, `security definer`, returns only `item_id, event_date`, granted to `anon`. Customer names never leave the database.
-- Table `admins (user_id)`; insert/update/delete policies on `reservations` only for users listed there. Also turn off public sign-ups in Supabase Auth.
-- Packages depend on single items: The Sweet Setup needs bloom-bar + sweets-cart, The Bridal Suite needs bloom-bar (plus a wall picked separately), The Full Bloom needs bloom-bar + pedestals + sweets-cart.
-- **Rentals page:** a month calendar above the walls. Picking a date marks booked items "Booked that day" and disables their buttons; days with every wall booked are greyed out. The chosen date carries to the Book page.
-- **Book page:** when the date changes, check the picks and flag any that are booked, with a prompt to remove them or change the date.
-- **Owner page** (`admin.html`, `noindex`): email sign-in, then a month view per item; tap a day to mark it booked (with the customer's name) or free it again.
-- The site reads availability with a plain `fetch` to the Supabase REST API using the publishable key (safe to ship in the page). If Supabase is unreachable, including when a free project pauses after a week without traffic, the site falls back to today's behavior: requests go through and the owner confirms by reply.
+- **Supabase project:** `dwazctmqkrnajqmswtiy` ("Bloom Events"), in its own Supabase account so it doesn't count against the zandstrading1-hash account's two free projects. The Supabase connector in Claude is still connected to the other account, so database changes go through the Supabase dashboard (SQL editor), not the connector.
+- **Owner sign-in:** Supabase's built-in email sends a sign-in link (it can't send codes without custom SMTP), only to members of the project's Supabase organization, 2 emails an hour. The Supabase account's email is on the owner list. To let the Bloom Events owner sign in with their own email, invite it to the Supabase organization and add it to `private.admins`.
+- **Custom domain:** if the site moves off GitHub Pages, update Site URL and Redirect URLs under Authentication, URL Configuration in Supabase, or sign-in links will go to the old address.
+- **No automatic buffer days.** If a wall needs the day before or after for delivery and pickup, the owner marks those days too. Ask the owner whether that should be automatic.
+- **Privacy page:** the draft should mention that confirmed bookings (customer name, date, items, notes) are stored with Supabase.
 
 ## Logo
 
@@ -37,4 +30,4 @@ Goal: the site shows which walls and rentals are already booked on a date, won't
 
 ## Tests
 
-`tests/` has two browser checks (booking flow; every page at four widths with axe). See the Tests section of the README.
+`tests/` has four browser checks: booking flow, availability calendar, owner page, and every page at four widths with axe. See the Tests section of the README.

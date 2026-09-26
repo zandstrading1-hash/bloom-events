@@ -1,0 +1,50 @@
+# Supabase pauses free projects after about a week with little database activity. This looks up booked
+# dates four times a day, the same read the website does, so the calendar stays awake. If the lookup
+# fails (project paused or broken), the run fails and GitHub emails the repository owner.
+name: Keep calendar awake
+
+on:
+  schedule:
+    - cron: '17 1,7,13,19 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Look up booked dates
+        env:
+          # Same public values as DB in site.js; the publishable key can only read item ids and dates.
+          SUPABASE_URL: https://dwazctmqkrnajqmswtiy.supabase.co
+          SUPABASE_KEY: sb_publishable_ZtfrALD9rvIFPSuJ7uZabw_8lTNSD2x
+        run: |
+          body=$(printf '{"from_date":"%s","to_date":"%s"}' "$(date -u +%F)" "$(date -u -d '+90 days' +%F)")
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 30 --retry-all-errors \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/booked_items" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" -d "$body"
+          echo
+
+  # GitHub turns off schedules in public repositories after 60 days without commits, which would stop
+  # the check above. After 45 quiet days this commits a dated marker file to keep the schedule on.
+  stay-scheduled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Commit a marker if main has been quiet for 45 days
+        run: |
+          quiet_days=$(( ($(date +%s) - $(git log -1 --format=%ct)) / 86400 ))
+          echo "Last commit was $quiet_days days ago."
+          if [ "$quiet_days" -ge 45 ]; then
+            date -u +%F > .github/keepalive
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .github/keepalive
+            git commit -m "Keep the calendar check scheduled"
+            git push
+          fi
