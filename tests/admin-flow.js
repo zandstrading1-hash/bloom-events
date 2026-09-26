@@ -1,4 +1,4 @@
-/* Owner bookings page: code sign-in, month view, marking items booked and free, non-admin and expired sign-ins. */
+/* Owner bookings page: emailed-link sign-in, month view, booking and unbooking, non-admin and expired sign-ins. */
 const { chromium } = require('playwright');
 // Run with the site served locally (see the README). Supabase is faked here, so no real bookings change.
 // BASE_URL overrides the address; CHROMIUM_PATH points Playwright at a local Chromium.
@@ -9,6 +9,8 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const now = new Date();
 const DAY = iso(new Date(now.getFullYear(), now.getMonth(), 20));
 const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', body: body === undefined ? '' : JSON.stringify(body) });
+// Supabase access tokens are JWTs; the page reads the email from the middle part.
+const TOKEN1 = ['{"alg":"HS256"}', '{"email":"owner@example.com"}', 'sig'].map(p => Buffer.from(p).toString('base64url')).join('.');
 
 const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   const log = [];
@@ -18,11 +20,6 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
     const url = new URL(req.url());
     log.push({ path: url.pathname + url.search, body: req.postData() });
     if (url.pathname.endsWith('/otp')) return json(route, 200, {});
-    if (url.pathname.endsWith('/verify')) {
-      const body = JSON.parse(req.postData());
-      if (body.token !== '123456') return json(route, 403, { msg: 'Token has expired or is invalid' });
-      return json(route, 200, { access_token: 'token-1', refresh_token: 'refresh-1', expires_in: 3600, user: { email: body.email } });
-    }
     if (url.pathname.endsWith('/token')) return refreshOk ? json(route, 200, { access_token: 'token-2', refresh_token: 'refresh-2', expires_in: 3600 }) : json(route, 400, { error_description: 'Invalid Refresh Token' });
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
     return json(route, 404, {});
@@ -31,7 +28,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
     const req = route.request();
     const url = new URL(req.url());
     log.push({ path: url.pathname + url.search, method: req.method(), body: req.postData(), auth: req.headers().authorization, apikey: req.headers().apikey });
-    if (req.headers().authorization !== 'Bearer token-1' && req.headers().authorization !== 'Bearer token-2') return json(route, 401, { message: 'JWT expired' });
+    if (req.headers().authorization !== `Bearer ${TOKEN1}` && req.headers().authorization !== 'Bearer token-2') return json(route, 401, { message: 'JWT expired' });
     if (url.pathname.endsWith('/rpc/am_i_admin')) return json(route, 200, admin);
     if (req.method() === 'GET') return json(route, 200, rows.filter(r => r.event_date >= url.searchParams.getAll('event_date')[0].slice(4) && r.event_date <= url.searchParams.getAll('event_date')[1].slice(4)));
     if (req.method() === 'POST') { let next = 100; JSON.parse(req.postData()).forEach(r => rows.push({ id: next++, ...r })); return route.fulfill({ status: 201 }); }
@@ -52,23 +49,22 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   p.on('pageerror', e => errors.push(e.message));
   await p.goto(BASE + '/admin.html', { waitUntil: 'networkidle' });
   assert(await p.getAttribute('meta[name="robots"]', 'content') === 'noindex, nofollow', 'owner page hidden from search engines');
-  assert(await p.isVisible('#code-request') && await p.isHidden('#bookings'), 'starts at sign-in');
+  assert(await p.isVisible('#link-request') && await p.isHidden('#bookings'), 'starts at sign-in');
   await p.fill('#admin-email', ' Owner@Example.com ');
-  await p.click('#code-request .form-submit');
-  await p.waitForSelector('#code-verify', { state: 'visible' });
-  const otp = log.find(l => l.path.endsWith('/otp'));
-  assert(otp && JSON.parse(otp.body).email === 'owner@example.com', 'code requested for the trimmed, lowercased email');
-  assert(await p.textContent('#code-email') === 'owner@example.com', 'shows where the code went');
-  await p.fill('#admin-code', '000000');
-  await p.click('#code-verify .form-submit');
-  await p.waitForFunction(() => document.getElementById('sign-in-status').textContent.includes('didn’t work'));
-  assert(true, 'wrong code explained');
-  await p.fill('#admin-code', '123 456');
-  await p.click('#code-verify .form-submit');
+  await p.click('#link-request .form-submit');
+  await p.waitForSelector('#link-sent', { state: 'visible' });
+  const otp = log.find(l => l.path.includes('/otp'));
+  assert(otp && JSON.parse(otp.body).email === 'owner@example.com', 'link requested for the trimmed, lowercased email');
+  assert(otp.path.includes(`redirect_to=${encodeURIComponent(BASE + '/admin.html')}`), 'link returns to this page: ' + otp.path);
+  assert(await p.textContent('#link-email') === 'owner@example.com', 'shows where the link went');
+  // the emailed link comes back with the sign-in after the #, as a fresh page load
+  await p.goto('about:blank');
+  await p.goto(`${BASE}/admin.html#access_token=${TOKEN1}&expires_at=${Math.floor(Date.now() / 1000) + 3600}&expires_in=3600&refresh_token=refresh-1&token_type=bearer&type=magiclink`, { waitUntil: 'networkidle' });
   await p.waitForSelector('#admin-calendar', { state: 'visible' });
-  assert(await p.textContent('#signed-in-email') === 'owner@example.com', 'signed in');
+  assert(await p.textContent('#signed-in-email') === 'owner@example.com', 'signed in from the link');
+  assert(!(await p.evaluate(() => location.hash)), 'sign-in removed from the address bar');
   const reads = log.filter(l => l.method === 'GET');
-  assert(reads.length && reads.every(l => l.auth === 'Bearer token-1' && l.apikey.startsWith('sb_publishable_')), 'bookings read with the owner’s sign-in');
+  assert(reads.length && reads.every(l => l.auth === `Bearer ${TOKEN1}` && l.apikey.startsWith('sb_publishable_')), 'bookings read with the owner’s sign-in');
   assert(await p.textContent(`[data-date="${DAY}"] .admin-count`) === '1', 'day shows 1 booked item');
   await p.click(`[data-date="${DAY}"]`);
   const booked = await p.textContent('#day-items li.is-booked');
@@ -100,14 +96,22 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   await p.reload({ waitUntil: 'networkidle' });
   assert(await p.isVisible('#admin-calendar'), 'still signed in after reload');
   await p.click('#sign-out');
-  assert(await p.isVisible('#code-request') && await p.evaluate(() => localStorage.getItem('bloom-admin-session')) === null, 'sign out clears the session');
+  assert(await p.isVisible('#link-request') && await p.evaluate(() => localStorage.getItem('bloom-admin-session')) === null, 'sign out clears the session');
   assert(!errors.length, 'no page errors: ' + errors.join('; '));
+  await ctx.close();
+
+  /* Expired or used link */
+  ctx = await b.newContext();
+  await fakeSupabase(ctx);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/admin.html#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`, { waitUntil: 'networkidle' });
+  assert(await p.isVisible('#link-request') && (await p.textContent('#sign-in-status')).includes('expired or was already used'), 'expired link explained');
   await ctx.close();
 
   /* Email not on the admin list */
   ctx = await b.newContext();
   await fakeSupabase(ctx, { admin: false });
-  await ctx.addInitScript(() => localStorage.setItem('bloom-admin-session', JSON.stringify({ access_token: 'token-1', refresh_token: 'refresh-1', expires_at: Math.floor(Date.now() / 1000) + 3600, email: 'someone@example.com' })));
+  await ctx.addInitScript(t => localStorage.setItem('bloom-admin-session', JSON.stringify({ access_token: t, refresh_token: 'refresh-1', expires_at: Math.floor(Date.now() / 1000) + 3600, email: 'someone@example.com' })), TOKEN1);
   p = await ctx.newPage();
   await p.goto(BASE + '/admin.html', { waitUntil: 'networkidle' });
   assert(await p.isVisible('#not-admin') && await p.isHidden('#admin-calendar'), 'non-admin email gets the not-set-up message');
@@ -121,7 +125,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
     p = await ctx.newPage();
     await p.goto(BASE + '/admin.html', { waitUntil: 'networkidle' });
     if (refreshOk) assert(await p.isVisible('#admin-calendar') && log.some(l => l.auth === 'Bearer token-2'), 'expired token refreshed silently');
-    else assert(await p.isVisible('#code-request') && (await p.textContent('#sign-in-status')).includes('expired'), 'failed refresh returns to sign-in with a message');
+    else assert(await p.isVisible('#link-request') && (await p.textContent('#sign-in-status')).includes('expired'), 'failed refresh returns to sign-in with a message');
     await ctx.close();
   }
 

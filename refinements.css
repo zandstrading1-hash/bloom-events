@@ -866,3 +866,4 @@ body.has-picks .book-bar { display: block; position: fixed; right: 1.5rem; botto
 @media (max-width: 800px) {
   .admin-grid { grid-template-columns: 1fr; }
 }
+.link-sent { display: grid; gap: 1rem; }

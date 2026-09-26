@@ -18,7 +18,8 @@ These need real answers; nothing on the site should be guessed.
 Built: the Rentals page calendar, booked-item blocking on the Rentals and Book pages, the owner page (`admin.html`) and the keep-alive GitHub Action. See the Availability calendar section of the README for how it works and how to add an owner email or a new rental.
 
 - **Supabase project:** `dwazctmqkrnajqmswtiy` ("Bloom Events"), in its own Supabase account so it doesn't count against the zandstrading1-hash account's two free projects. The Supabase connector in Claude is still connected to the other account, so database changes go through the Supabase dashboard (SQL editor), not the connector.
-- **Owner sign-in:** codes are sent by Supabase's built-in email, which only delivers to members of the project's Supabase organization and allows 2 emails an hour. For a different owner email, invite it to the organization or set up custom SMTP.
+- **Owner sign-in:** Supabase's built-in email sends a sign-in link (it can't send codes without custom SMTP), only to members of the project's Supabase organization, 2 emails an hour. The Supabase account's email is on the owner list. To let the Bloom Events owner sign in with their own email, invite it to the Supabase organization and add it to `private.admins`.
+- **Custom domain:** if the site moves off GitHub Pages, update Site URL and Redirect URLs under Authentication, URL Configuration in Supabase, or sign-in links will go to the old address.
 - **No automatic buffer days.** If a wall needs the day before or after for delivery and pickup, the owner marks those days too. Ask the owner whether that should be automatic.
 - **Privacy page:** the draft should mention that confirmed bookings (customer name, date, items, notes) are stored with Supabase.
 

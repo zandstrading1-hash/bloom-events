@@ -1,4 +1,4 @@
-/* Owner bookings page: sign in with an emailed code, then mark items booked or free by day. No dependencies. */
+/* Owner bookings page: sign in with an emailed link, then book or unbook items by day. No dependencies. */
 (() => {
   'use strict';
   const { RENTALS, DB, iso, parseIso, listNames } = window.BloomEvents;
@@ -56,8 +56,8 @@
 
   const signIn = $('sign-in');
   const bookings = $('bookings');
-  const requestForm = $('code-request');
-  const verifyForm = $('code-verify');
+  const requestForm = $('link-request');
+  const linkSent = $('link-sent');
   const signInStatus = $('sign-in-status');
   const bookingsStatus = $('bookings-status');
   const busy = (form, on, label) => {
@@ -69,7 +69,7 @@
     signIn.hidden = false;
     bookings.hidden = true;
     requestForm.hidden = false;
-    verifyForm.hidden = true;
+    linkSent.hidden = true;
     signInStatus.textContent = message;
   };
   const signedOut = message => { saveSession(null); showSignIn(message); };
@@ -207,6 +207,7 @@
     }
   };
 
+  // Supabase's built-in email can only send a link (no code); it returns here with the sign-in after the #.
   requestForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!requestForm.reportValidity()) return;
@@ -214,42 +215,20 @@
     busy(requestForm, true, 'Sending…');
     signInStatus.textContent = '';
     try {
-      await request('/auth/v1/otp', { method: 'POST', body: { email, create_user: true } });
-      $('code-email').textContent = email;
+      await request(`/auth/v1/otp?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`, { method: 'POST', body: { email, create_user: true } });
+      $('link-email').textContent = email;
       requestForm.hidden = true;
-      verifyForm.hidden = false;
-      $('admin-code').value = '';
-      $('admin-code').focus();
+      linkSent.hidden = false;
     } catch (err) {
       signInStatus.textContent = err.status === 429
-        ? 'Too many codes have been requested. Wait a few minutes, then try again.'
-        : `The code couldn’t be sent (${err.message}). Check the email address and try again.`;
+        ? 'Too many sign-in emails have been requested. Wait an hour, then try again.'
+        : `The link couldn’t be sent (${err.message}). Check the email address and try again.`;
     } finally {
-      busy(requestForm, false, 'Email me a sign-in code');
+      busy(requestForm, false, 'Email me a sign-in link');
     }
   });
 
-  verifyForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    const code = $('admin-code');
-    code.value = code.value.replace(/\s/g, '');
-    if (!verifyForm.reportValidity()) return;
-    busy(verifyForm, true, 'Signing in…');
-    signInStatus.textContent = '';
-    try {
-      keep(await request('/auth/v1/verify', { method: 'POST', body: { type: 'email', email: $('code-email').textContent, token: code.value } }));
-    } catch (err) {
-      signInStatus.textContent = err.status >= 400 && err.status < 500
-        ? 'That code didn’t work or has expired. Check it, or send a new one.'
-        : `Couldn’t sign in (${err.message}). Please try again.`;
-      return;
-    } finally {
-      busy(verifyForm, false, 'Sign in');
-    }
-    await open();
-  });
-
-  $('code-restart').addEventListener('click', () => { showSignIn(); $('admin-email').focus(); });
+  $('link-restart').addEventListener('click', () => { showSignIn(); $('admin-email').focus(); });
 
   $('sign-out').addEventListener('click', () => {
     const token = session && session.access_token;
@@ -312,5 +291,19 @@
     await reload();
   });
 
-  if (session) open(); else showSignIn();
+  const fromLink = new URLSearchParams(location.hash.slice(1));
+  let linkMessage = '';
+  if (fromLink.has('access_token') || fromLink.has('error')) history.replaceState(null, '', location.pathname + location.search);
+  if (fromLink.has('access_token')) {
+    const token = fromLink.get('access_token');
+    let email = '';
+    try { email = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email || ''; } catch { email = ''; }
+    keep({ access_token: token, refresh_token: fromLink.get('refresh_token'), expires_at: Number(fromLink.get('expires_at')) || 0, expires_in: Number(fromLink.get('expires_in')) || 3600, user: { email } });
+  } else if (fromLink.has('error')) {
+    linkMessage = fromLink.get('error_code') === 'otp_expired'
+      ? 'That sign-in link has expired or was already used. Send a new one.'
+      : `Sign-in didn’t work (${fromLink.get('error_description') || fromLink.get('error')}). Send a new link.`;
+  }
+
+  if (session) open(); else showSignIn(linkMessage);
 })();

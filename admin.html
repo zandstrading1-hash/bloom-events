@@ -33,16 +33,14 @@
 
     <section class="admin-card" id="sign-in" aria-labelledby="sign-in-title">
       <h2 id="sign-in-title">Sign in</h2>
-      <form id="code-request" novalidate>
+      <form id="link-request" novalidate>
         <div class="form-field"><label for="admin-email">Email</label><input type="email" id="admin-email" autocomplete="email" required maxlength="254"></div>
-        <button type="submit" class="form-submit"><span>Email me a sign-in code</span></button>
+        <button type="submit" class="form-submit"><span>Email me a sign-in link</span></button>
       </form>
-      <form id="code-verify" novalidate hidden>
-        <p>We sent a code to <strong id="code-email"></strong>. It can take a minute to arrive.</p>
-        <div class="form-field"><label for="admin-code">Code</label><input type="text" id="admin-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" maxlength="10" required></div>
-        <button type="submit" class="form-submit"><span>Sign in</span></button>
-        <button type="button" class="admin-link" id="code-restart">Use a different email or send a new code</button>
-      </form>
+      <div class="link-sent" id="link-sent" hidden>
+        <p>We sent a sign-in link to <strong id="link-email"></strong>. Tap it to come back here signed in. It can take a minute to arrive.</p>
+        <button type="button" class="admin-link" id="link-restart">Use a different email or send a new link</button>
+      </div>
       <p class="admin-status" id="sign-in-status" role="status"></p>
     </section>
 

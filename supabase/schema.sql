@@ -9,6 +9,7 @@ create schema if not exists private;
 create table if not exists private.admins (
   email text primary key check (email = lower(email))
 );
+alter table private.admins enable row level security;
 
 create or replace function private.is_admin() returns boolean
 language sql stable security definer set search_path = ''
