@@ -82,11 +82,21 @@
     expires_at: data.expires_at || Math.floor(Date.now() / 1000) + data.expires_in,
     email: (data.user && data.user.email) || (session && session.email) || ''
   });
+  // One refresh at a time. Another open copy of the app may already have refreshed (reusing an old
+  // refresh token makes Supabase end the sign-in), so read its newer sign-in from storage first.
+  let refreshing = null;
   const accessToken = async () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SESSION_KEY));
+      if (stored && session && stored.expires_at > session.expires_at) session = stored;
+    } catch { /* keep this copy's sign-in */ }
     if (!session) throw Object.assign(new Error('signed out'), { status: 401 });
     if (session.expires_at - 60 < Date.now() / 1000) {
+      refreshing = refreshing || request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: session.refresh_token } })
+        .then(keep)
+        .finally(() => { refreshing = null; });
       try {
-        keep(await request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: session.refresh_token } }));
+        await refreshing;
       } catch (e) {
         if (e.status >= 400 && e.status < 500) e.status = 401;
         throw e;
@@ -170,11 +180,11 @@
     const button = e.target.querySelector('button');
     button.disabled = true;
     try {
-      await request(`/auth/v1/otp?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`, { method: 'POST', body: { email: $('link-email').value.trim().toLowerCase(), create_user: true } });
+      await request(`/auth/v1/otp?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`, { method: 'POST', body: { email: $('link-email').value.trim().toLowerCase(), create_user: false } });
       say($('signin-status'), 'Check your email for a sign-in link. It can take a minute to arrive.');
     } catch (err) {
       say($('signin-status'), err.status === 429 ? 'Too many emails have been sent. Wait an hour, then try again.'
-        : /signup|not allowed/i.test(err.message) ? 'This email doesn’t have an account yet. Ask whoever looks after the website to add it.'
+        : /signup|not allowed|not found/i.test(err.message) ? 'This email doesn’t have an account yet. Ask whoever looks after the website to add it.'
         : `The link couldn’t be sent (${err.message}).`, true);
     } finally {
       button.disabled = false;
@@ -256,12 +266,12 @@
       buttonText: { prev: 'Previous', next: 'Next', today: 'Today', month: 'Month', week: 'Week', list: 'List', day: 'Day' },
       height: 'auto',
       dayMaxEvents: phone ? 2 : 4,
-      moreLinkClick: ({ date }) => { selectDay(date.toISOString().slice(0, 10)); },
+      moreLinkClick: ({ date }) => { selectDay(date.toISOString().slice(0, 10)); return 'dayGridMonth'; },
       nowIndicator: true,
-      slotMinTime: '06:00:00',
       eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
       noEventsText: 'No bookings',
       views: {
+        timeGrid: { slotDuration: '01:00:00' },
         dayGridMonth: {
           eventDisplay: 'block',
           displayEventTime: false,
@@ -273,7 +283,7 @@
         }
       },
       events: (info, success, failure) => {
-        db(`/rest/v1/owner_bookings?select=*&status=in.(requested,confirmed)&start_local=lt.${info.endStr.slice(0, 19)}&end_local=gt.${info.startStr.slice(0, 19)}&order=start_local`)
+        db(`/rest/v1/owner_bookings?select=*&status=in.(requested,confirmed)&start_local=lt.${info.endStr.slice(0, 19)}&end_local=gt.${info.startStr.slice(0, 19)}&order=start_local,id`)
           .then(rows => success(rows.map(row => ({
             id: String(row.id),
             title: `${row.customer_name || 'No name'} · ${itemList(row.items)}`,
@@ -405,7 +415,9 @@
     f('guests').value = (row && row.guests) || '';
     f('price').value = row && row.price != null ? row.price : '';
     f('deposit').checked = Boolean(row && row.deposit_paid);
-    f('status').value = row ? (row.status === 'requested' ? 'requested' : row.status === 'confirmed' ? 'confirmed' : 'cancelled') : 'confirmed';
+    f('status').querySelectorAll('[data-other]').forEach(option => option.remove());
+    if (row && !['confirmed', 'requested', 'cancelled'].includes(row.status)) f('status').append(el('option', { value: row.status, 'data-other': true, text: STATUS[row.status] || row.status }));
+    f('status').value = row ? row.status : 'confirmed';
     f('notes').value = (row && row.notes) || '';
     paintOvernight();
     paintTaken(new Map());
@@ -415,7 +427,7 @@
   };
   $('new-booking').addEventListener('click', () => openForm({ date: calendar && currentTab === 'calendar' && calendar.view.type === 'dayGridMonth' ? selectedDay : '' }));
 
-  const paintOvernight = () => { f('overnight').hidden = !(f('start').value && f('end').value && f('end').value < f('start').value); };
+  const paintOvernight = () => { f('overnight').hidden = !(f('start').value && f('end').value && f('end').value <= f('start').value); };
   const paintTaken = taken => boxes().forEach(box => {
     const hit = taken.get(box.value);
     const label = box.closest('label');
@@ -427,7 +439,7 @@
   const checkConflicts = debounce(async () => {
     const id = ++conflictId;
     const [date, startTime, endTime] = [f('date').value, f('start').value, f('end').value];
-    if (!date || !startTime || !endTime || startTime === endTime) { paintTaken(new Map()); return; }
+    if (!date || !startTime || !endTime) { paintTaken(new Map()); return; }
     try {
       const rows = await rpc('item_conflicts', { p_date: date, p_start: startTime, p_end: endTime, p_setup: Number(f('setup').value) || 0, p_pickup: Number(f('pickup').value) || 0, p_booking: editing ? editing.id : null });
       if (id !== conflictId) return;
@@ -453,8 +465,8 @@
     e.preventDefault();
     const items = boxes().filter(box => box.checked).map(box => box.value);
     if (!form.reportValidity()) return;
+    if (!f('name').value.trim()) { say($('form-status'), 'Enter the customer’s name.', true); f('name').focus(); return; }
     if (!items.length) { say($('form-status'), 'Choose at least one item.', true); return; }
-    if (f('start').value === f('end').value) { say($('form-status'), 'The end time can’t be the same as the start time.', true); return; }
     const button = form.querySelector('[type="submit"]');
     button.disabled = true;
     say($('form-status'), 'Saving…');
@@ -498,9 +510,9 @@
     const now = nowWall();
     const query = search(['customer_name', 'customer_phone', 'address', 'venue', 'notes'], $('booking-search').value);
     const where = {
-      upcoming: `status=in.(requested,confirmed)&end_local=gte.${now}&order=start_local.asc`,
-      past: `status=in.(requested,confirmed)&end_local=lt.${now}&order=start_local.desc`,
-      cancelled: 'status=in.(cancelled,declined,expired)&order=start_local.desc'
+      upcoming: `status=in.(requested,confirmed)&end_local=gte.${now}&order=start_local.asc,id.asc`,
+      past: `status=in.(requested,confirmed)&end_local=lt.${now}&order=start_local.desc,id.desc`,
+      cancelled: 'status=in.(cancelled,declined,expired)&order=start_local.desc,id.desc'
     }[listKind];
     try {
       const rows = await db(`/rest/v1/owner_bookings?select=*&${where}${query}&limit=${PAGE + 1}&offset=${listOffset}`);
@@ -564,6 +576,7 @@
     editor.addEventListener('submit', async e => {
       e.preventDefault();
       if (!editor.reportValidity()) return;
+      if (!name.value.trim()) { say(status, 'Enter the customer’s name.', true); name.focus(); return; }
       const body = { name: name.value.trim(), phone: phone.value.trim() || null, email: email.value.trim().toLowerCase() || null, notes: notes.value.trim() || null };
       try {
         const saved = customer.id
@@ -582,7 +595,7 @@
     try {
       const [[customer], rows] = await Promise.all([
         db(`/rest/v1/owner_customers?select=*&id=eq.${id}`),
-        db(`/rest/v1/owner_bookings?select=*&customer_id=eq.${id}&order=start_local.desc&limit=200`)
+        db(`/rest/v1/owner_bookings?select=*&customer_id=eq.${id}&order=start_local.desc,id.desc&limit=200`)
       ]);
       if (!customer) { toast('That customer no longer exists.'); return; }
       $('customer-title').textContent = customer.name;

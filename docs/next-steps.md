@@ -22,6 +22,7 @@ Built: the Rentals page calendar, booked-item blocking on the Rentals and Book p
 - **Next (Phase 2):** on the website, customers choose a start and end time and see which items are free then; requests are saved straight into the app as "On hold" and hold their items, expiring after about 3 days unless she confirms (a scheduled database job); a requests inbox with Confirm and Decline; spam limits (a hidden trap field, a couple of pending requests per email or phone).
 - **Later (Phase 3):** new-request notifications on her phone, her bookings in her phone's own calendar through a private link, and deposit and payment tracking.
 - **Privacy page:** the draft should mention that bookings (customer name, phone, email, event address, date, items, notes) are stored with Supabase.
+- **Own domain before launch.** The site shares its address (zandstrading1-hash.github.io) with other sites on the same GitHub account. The owner app's sign-in is stored for that whole address, so a script on any of those sites could read it. Moving Bloom to its own domain (for example bloomevents.com) fixes this; then update Site URL and Redirect URLs in Supabase.
 
 ## Logo
 

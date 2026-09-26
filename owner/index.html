@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="Bloom">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="app.css?v=1">
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" integrity="sha384-WDvnzcla8X1CQM97EnYyl4OoTCvmMFp5lBiVNO3IjVdvLMOUjwt+iuYb/Mru5A9v" crossorigin="anonymous" defer></script>
 <script src="../site.js?v=20260925-calendar" defer></script>
 <script src="app.js?v=1" defer></script>
 </head>
@@ -143,7 +143,7 @@
         <label class="field">Starts *<input type="time" id="f-start" required step="900"></label>
         <label class="field">Ends *<input type="time" id="f-end" required step="900"></label>
       </div>
-      <p class="hint" id="f-overnight" hidden>Ends the next day.</p>
+      <p class="hint" id="f-overnight" hidden>Ends the next day (the same time means 24 hours).</p>
       <div class="two">
         <label class="field">Setup before (min)<input type="number" id="f-setup" min="0" max="1440" step="15" inputmode="numeric" required></label>
         <label class="field">Pickup after (min)<input type="number" id="f-pickup" min="0" max="1440" step="15" inputmode="numeric" required></label>

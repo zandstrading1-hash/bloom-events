@@ -219,7 +219,8 @@ begin
     end if;
   end if;
 
-  insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict do nothing;
+  -- The conflict target matters: without it an overlap would be skipped silently instead of refused.
+  insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict (booking_id, item_id) do nothing;
   return v_id;
 end
 $$;

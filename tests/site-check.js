@@ -16,7 +16,7 @@ const ownerBooking = { id: 1, status: 'confirmed', customer_id: 1, customer_name
 const calendarLib = fs.readFileSync(require('path').join(__dirname, 'node_modules/fullcalendar/index.global.min.js'));
 const fakeSupabase = async page => {
   const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-  await page.route('https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: calendarLib }));
+  await page.route('https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js', r => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: calendarLib }));
   await page.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', r => {
     const path = new URL(r.request().url()).pathname;
     if (path.endsWith('/rpc/booked_items')) return json(r, booked);

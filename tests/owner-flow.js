@@ -20,7 +20,7 @@ const jwt = email => ['{"alg":"HS256"}', JSON.stringify({ email }), 'sig'].map(p
 const TOKEN = jwt('owner@example.com');
 
 // A small in-memory stand-in for the Supabase API, with the same rules as supabase/schema.sql.
-const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
+const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } = {}) => {
   const s = {
     customers: [
       { id: 1, name: 'Jane Doe', phone: '586-555-0100', email: 'jane@example.com', notes: 'Prefers texts', created_at: '2026-01-05T15:00:00Z' },
@@ -36,6 +36,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
     log: [],
     next: 100
   };
+  s.bookings.push(...extra);
   const isActive = b => b.status === 'requested' || b.status === 'confirmed';
   const held = b => [w(b.start_local) - b.setup_minutes * 60000, w(b.end_local) + b.pickup_minutes * 60000];
   const overlap = (a, b) => a[0] < b[1] && b[0] < a[1];
@@ -79,7 +80,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   };
   const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', body: body === undefined ? '' : JSON.stringify(body) });
 
-  await ctx.route(CALENDAR_LIB, route => route.fulfill({ status: 200, contentType: 'application/javascript', body: calendarLib }));
+  await ctx.route(CALENDAR_LIB, route => route.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: calendarLib }));
   await ctx.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -217,6 +218,9 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   await p.fill('#f-start', '20:00');
   await p.fill('#f-end', '01:00');
   assert(await p.isVisible('#f-overnight'), 'an end time before the start says it ends the next day');
+  await p.fill('#f-end', '20:00');
+  assert(await p.isVisible('#f-overnight'), 'the same start and end time reads as 24 hours');
+  await p.fill('#f-end', '01:00');
   await p.check('#f-items input[value="greenery-wall"]');
   s.raceItems = ['greenery-wall'];
   await p.click('#booking-form [type="submit"]');
@@ -334,6 +338,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
   await p.waitForFunction(() => document.getElementById('signin-status').textContent.includes('Check your email'));
   const otp = s.log.find(l => l.path === '/auth/v1/otp');
   assert(otp.body.email === 'owner@example.com' && otp.search.includes(encodeURIComponent(`${BASE}/owner/`)), 'sign-in link returns to the app');
+  assert(otp.body.create_user === false, 'the app never asks Supabase to create an account');
   await p.goto('about:blank');
   await p.goto(`${BASE}/owner/#access_token=${TOKEN}&expires_in=3600&refresh_token=refresh-1&token_type=bearer&type=magiclink`, { waitUntil: 'networkidle' });
   await p.waitForSelector('#password-dialog[open]');
@@ -359,6 +364,30 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true } = {}) => {
     else assert(await p.isVisible('#signin') && (await p.textContent('#signin-status')).includes('sign in again'), 'a sign-in that can’t refresh goes back to sign-in');
     await ctx.close();
   }
+
+  /* A busy day on a phone: "+ more" picks the day; declined bookings keep their status when edited */
+  const busy = n => ({ id: 200 + n, customer_id: 1, status: 'confirmed', start_local: `${LATER}T0${n}:00:00`, end_local: `${LATER}T0${n}:30:00`, setup_minutes: 0, pickup_minutes: 0, address: null, venue: null, event_type: null, guests: null, price: null, deposit_paid: false, notes: null, items: ['champagne-wall'] });
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  s = await fakeSupabase(ctx, { extra: [busy(1), busy(3), busy(5), { ...busy(7), id: 299, status: 'declined', customer_id: 2 }] });
+  await ctx.addInitScript(t => localStorage.setItem('bloom-owner-session', JSON.stringify({ access_token: t, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, email: 'owner@example.com' })), TOKEN);
+  p = await ctx.newPage();
+  p.on('dialog', d => d.accept());
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  if (!(await p.$(`.fc-daygrid-day[data-date="${LATER}"]`))) await p.click('.fc-next-button');
+  await p.waitForSelector(`.fc-daygrid-day[data-date="${LATER}"] .fc-daygrid-more-link`);
+  await p.click(`.fc-daygrid-day[data-date="${LATER}"] .fc-daygrid-more-link`);
+  await p.waitForFunction(() => document.querySelectorAll('#agenda-list li').length === 3);
+  assert(!(await p.$('.fc-popover')), '"+ more" lists the day underneath instead of opening a popover');
+  await p.click('[data-tab="bookings"]');
+  await p.click('[data-list="cancelled"]');
+  await p.waitForSelector('#booking-list li:has-text("Declined") button');
+  await p.click('#booking-list li:has-text("Declined") button');
+  await p.click('#booking-body >> text=Edit');
+  assert(await p.inputValue('#f-status') === 'declined', 'editing a declined booking keeps it declined');
+  await p.fill('#f-name', '   ');
+  await p.click('#booking-form [type="submit"]');
+  assert((await p.textContent('#form-status')).includes('Enter the customer’s name'), 'a name of only spaces is caught');
+  await ctx.close();
 
   /* Old address */
   ctx = await b.newContext({ serviceWorkers: 'block' });
