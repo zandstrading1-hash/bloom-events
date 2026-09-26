@@ -5,12 +5,13 @@
   "scripts": {
     "booking": "node booking-flow.js",
     "calendar": "node calendar-flow.js",
-    "admin": "node admin-flow.js",
+    "owner": "node owner-flow.js",
     "site": "node site-check.js",
-    "test": "node booking-flow.js && node calendar-flow.js && node admin-flow.js && node site-check.js"
+    "test": "node booking-flow.js && node calendar-flow.js && node owner-flow.js && node site-check.js"
   },
   "devDependencies": {
     "axe-core": "4.10.3",
+    "fullcalendar": "6.1.21",
     "playwright": "1.56.1"
   }
 }

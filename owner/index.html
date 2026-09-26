@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Bloom Bookings</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#a83d64">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bloom">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="app.css?v=1">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" integrity="sha384-WDvnzcla8X1CQM97EnYyl4OoTCvmMFp5lBiVNO3IjVdvLMOUjwt+iuYb/Mru5A9v" crossorigin="anonymous" defer></script>
+<script src="../site.js?v=20260925-calendar" defer></script>
+<script src="app.js?v=1" defer></script>
+</head>
+<body>
+
+<main class="signin" id="signin" hidden>
+  <img class="signin-logo" src="../bloom-events-logo.svg" alt="Bloom Events" width="181" height="80">
+  <h1>Bookings</h1>
+  <form class="card stack" id="password-form" novalidate>
+    <label class="field">Email<input type="email" id="signin-email" autocomplete="username" required maxlength="254"></label>
+    <label class="field">Password<input type="password" id="signin-password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+  <p class="status" id="signin-status" role="status"></p>
+  <details class="card help">
+    <summary>First time, or forgot your password?</summary>
+    <form class="stack" id="link-form" novalidate>
+      <p>We’ll email you a sign-in link. Open it, then choose a password to use in the app.</p>
+      <label class="field">Email<input type="email" id="link-email" autocomplete="email" required maxlength="254"></label>
+      <button class="btn" type="submit">Email me a sign-in link</button>
+    </form>
+  </details>
+</main>
+
+<main class="notice" id="not-admin" hidden>
+  <h1>Not set up yet</h1>
+  <p>You’re signed in as <strong id="not-admin-email"></strong>, but this email can’t manage bookings yet. Ask whoever looks after the website to add it.</p>
+  <button class="btn" type="button" data-action="sign-out">Sign out</button>
+</main>
+
+<div class="shell" id="shell" hidden>
+  <header class="topbar">
+    <h1 id="screen-title">Calendar</h1>
+    <button class="btn primary small" type="button" id="new-booking">New booking</button>
+  </header>
+
+  <main class="screens">
+    <section class="screen" id="screen-calendar" aria-labelledby="screen-title">
+      <div id="calendar"></div>
+      <section class="agenda" id="day-agenda" aria-labelledby="agenda-title" hidden>
+        <div class="agenda-head"><h2 id="agenda-title">Today</h2><button class="btn small" type="button" id="agenda-new">Add a booking this day</button></div>
+        <ul class="list" id="agenda-list" aria-live="polite"></ul>
+        <p class="empty" id="agenda-empty">No bookings this day.</p>
+      </section>
+    </section>
+
+    <section class="screen" id="screen-bookings" aria-labelledby="screen-title" hidden>
+      <div class="segmented" role="group" aria-label="Which bookings">
+        <button type="button" data-list="upcoming" aria-pressed="true">Upcoming</button>
+        <button type="button" data-list="past" aria-pressed="false">Past</button>
+        <button type="button" data-list="cancelled" aria-pressed="false">Cancelled</button>
+      </div>
+      <label class="search"><span class="visually-hidden">Search bookings</span><input type="search" id="booking-search" placeholder="Search name, phone, address or notes" autocomplete="off"></label>
+      <ul class="list" id="booking-list"></ul>
+      <p class="empty" id="booking-empty" hidden></p>
+      <button class="btn more" type="button" id="booking-more" hidden>Show more</button>
+    </section>
+
+    <section class="screen" id="screen-customers" aria-labelledby="screen-title" hidden>
+      <div class="row">
+        <label class="search"><span class="visually-hidden">Search customers</span><input type="search" id="customer-search" placeholder="Search name, phone or email" autocomplete="off"></label>
+        <button class="btn small" type="button" id="new-customer">Add</button>
+      </div>
+      <ul class="list" id="customer-list"></ul>
+      <p class="empty" id="customer-empty" hidden></p>
+    </section>
+
+    <section class="screen" id="screen-more" aria-labelledby="screen-title" hidden>
+      <div class="card stack" id="install-card">
+        <h2>Put the app on your phone</h2>
+        <p id="install-text">On iPhone, open this page in Safari, tap the Share button, then “Add to Home Screen”. On Android, open it in Chrome and choose “Install app”.</p>
+        <button class="btn primary" type="button" id="install-button" hidden>Install app</button>
+      </div>
+      <form class="card stack" id="settings-form" novalidate>
+        <h2>Setup and pickup time</h2>
+        <p>Blocked before and after every new booking, so items aren’t double-booked while you set up and pack up.</p>
+        <div class="two">
+          <label class="field">Setup (minutes)<input type="number" id="setting-setup" min="0" max="1440" step="15" inputmode="numeric" required></label>
+          <label class="field">Pickup (minutes)<input type="number" id="setting-pickup" min="0" max="1440" step="15" inputmode="numeric" required></label>
+        </div>
+        <button class="btn" type="submit">Save</button>
+      </form>
+      <div class="card stack">
+        <h2>Account</h2>
+        <p>Signed in as <strong id="account-email"></strong></p>
+        <button class="btn" type="button" id="change-password">Change password</button>
+        <button class="btn" type="button" data-action="sign-out">Sign out</button>
+      </div>
+      <p class="site-link"><a href="../index.html">Open the Bloom Events website</a></p>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button type="button" data-tab="calendar" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>Calendar</button>
+    <button type="button" data-tab="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Bookings</button>
+    <button type="button" data-tab="customers"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c2 .8 3.1 2.5 3.5 5.2"/></svg>Customers</button>
+    <button type="button" data-tab="more"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>More</button>
+  </nav>
+</div>
+
+<dialog class="sheet" id="booking-dialog" aria-labelledby="booking-title">
+  <header class="sheet-head"><h2 id="booking-title">Booking</h2><button type="button" class="close" data-close>Close</button></header>
+  <div class="sheet-body" id="booking-body"></div>
+</dialog>
+
+<dialog class="sheet" id="form-dialog" aria-labelledby="form-title">
+  <header class="sheet-head"><h2 id="form-title">New booking</h2><button type="button" class="close" data-close>Cancel</button></header>
+  <form class="sheet-body stack" id="booking-form" novalidate>
+    <fieldset class="stack">
+      <legend>Customer</legend>
+      <div class="picked" id="picked-customer" hidden><span></span><button type="button" class="link" id="unpick-customer">Use a different customer</button></div>
+      <div id="find-customer">
+        <label class="field">Find an existing customer<input type="search" id="customer-find" placeholder="Start typing a name or phone" autocomplete="off"></label>
+        <ul class="finds" id="customer-finds"></ul>
+      </div>
+      <label class="field">Name *<input type="text" id="f-name" required maxlength="200" autocomplete="off"></label>
+      <div class="two">
+        <label class="field">Phone<input type="tel" id="f-phone" maxlength="40" autocomplete="off"></label>
+        <label class="field">Email<input type="email" id="f-email" maxlength="254" autocomplete="off"></label>
+      </div>
+    </fieldset>
+    <fieldset class="stack">
+      <legend>When</legend>
+      <label class="field">Date *<input type="date" id="f-date" required></label>
+      <div class="two">
+        <label class="field">Starts *<input type="time" id="f-start" required step="900"></label>
+        <label class="field">Ends *<input type="time" id="f-end" required step="900"></label>
+      </div>
+      <p class="hint" id="f-overnight" hidden>Ends the next day (the same time means 24 hours).</p>
+      <div class="two">
+        <label class="field">Setup before (min)<input type="number" id="f-setup" min="0" max="1440" step="15" inputmode="numeric" required></label>
+        <label class="field">Pickup after (min)<input type="number" id="f-pickup" min="0" max="1440" step="15" inputmode="numeric" required></label>
+      </div>
+    </fieldset>
+    <fieldset class="stack">
+      <legend>Items *</legend>
+      <ul class="items" id="f-items"></ul>
+    </fieldset>
+    <fieldset class="stack">
+      <legend>Event</legend>
+      <label class="field">Address<input type="text" id="f-address" maxlength="300" autocomplete="off"></label>
+      <label class="field">Venue<input type="text" id="f-venue" maxlength="200" autocomplete="off"></label>
+      <div class="two">
+        <label class="field">Celebrating<select id="f-type"><option value="">Choose one</option><option>Wedding</option><option>Bridal shower</option><option>Baby shower</option><option>Birthday</option><option>Engagement</option><option>Graduation</option><option>Corporate event</option><option>Other celebration</option></select></label>
+        <label class="field">Guests<input type="number" id="f-guests" min="1" max="100000" step="1" inputmode="numeric"></label>
+      </div>
+    </fieldset>
+    <fieldset class="stack">
+      <legend>Money and status</legend>
+      <div class="two">
+        <label class="field">Price ($)<input type="number" id="f-price" min="0" step="0.01" inputmode="decimal"></label>
+        <label class="field">Status<select id="f-status"><option value="confirmed">Confirmed</option><option value="requested">On hold (not confirmed)</option><option value="cancelled">Cancelled</option></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="f-deposit"> Deposit paid</label>
+    </fieldset>
+    <label class="field">Notes<textarea id="f-notes" rows="3" maxlength="5000"></textarea></label>
+    <p class="status" id="form-status" role="status"></p>
+    <button class="btn primary" type="submit">Save booking</button>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="customer-dialog" aria-labelledby="customer-title">
+  <header class="sheet-head"><h2 id="customer-title">Customer</h2><button type="button" class="close" data-close>Close</button></header>
+  <div class="sheet-body" id="customer-body"></div>
+</dialog>
+
+<dialog class="sheet small" id="password-dialog" aria-labelledby="password-title">
+  <header class="sheet-head"><h2 id="password-title">Choose a password</h2><button type="button" class="close" data-close>Later</button></header>
+  <form class="sheet-body stack" id="password-new-form" novalidate>
+    <p id="password-intro">Use at least 8 characters. Your phone can save it for you.</p>
+    <input class="visually-hidden" type="email" id="password-username" autocomplete="username" tabindex="-1" aria-hidden="true" readonly>
+    <label class="field">New password<input type="password" id="new-password" autocomplete="new-password" required minlength="8"></label>
+    <label class="field">Type it again<input type="password" id="new-password-2" autocomplete="new-password" required minlength="8"></label>
+    <p class="status" id="password-status" role="status"></p>
+    <button class="btn primary" type="submit">Save password</button>
+  </form>
+</dialog>
+
+<p class="toast" id="toast" role="status" aria-live="polite"></p>
+
+</body>
+</html>
