@@ -70,9 +70,13 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 .tabbar button[aria-current="page"] { color: var(--rose); }
 
-.segmented { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border-radius: 999px; background: var(--soft); }
+.segmented { display: grid; grid-template-columns: repeat(4, 1fr); padding: 3px; border-radius: 999px; background: var(--soft); }
 .segmented button { min-height: 40px; border: 0; border-radius: 999px; background: none; color: var(--ink); font: 500 .92rem var(--body); cursor: pointer; }
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--rose); box-shadow: 0 1px 3px rgba(75, 41, 55, .15); }
+.segmented .count, .tab-badge { display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem; padding: 0 .3rem; border-radius: 999px; background: var(--rose); color: #fff; font-size: .7rem; font-weight: 600; }
+.tabbar button { position: relative; }
+.tab-badge { position: absolute; top: 6px; left: calc(50% + 6px); }
+.sub.request { color: var(--hold); }
 
 /* Lists */
 .list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
@@ -89,6 +93,7 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 .badge.cancelled, .badge.declined, .badge.expired { background: #eee9eb; color: #5d5157; }
 .empty { margin: 1rem 0; text-align: center; color: var(--muted); }
 .more { justify-self: center; }
+.decline-all { justify-self: end; }
 
 /* Sheets (booking, customer, forms) */
 .sheet { width: 100%; max-width: 40rem; max-height: 100dvh; margin: auto; padding: 0; border: 0; border-radius: 16px; background: var(--bg); color: var(--ink); box-shadow: 0 20px 60px rgba(75, 41, 55, .3); }
@@ -100,7 +105,7 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 .facts { display: grid; gap: .8rem; margin: 0; }
 .facts div { display: grid; gap: .1rem; }
 .facts dt { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-.facts dd { margin: 0; }
+.facts dd { margin: 0; white-space: pre-line; }
 .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1.2rem 0 0; }
 .actions .btn { flex: 1 1 auto; }
 .contact { display: flex; flex-wrap: wrap; gap: .5rem; margin: .8rem 0 1.1rem; }

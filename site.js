@@ -150,7 +150,8 @@
     'pkg-full-bloom': ['bloom-bar', 'pedestals', 'sweets-cart']
   };
   const WALLS = Object.keys(RENTALS).filter(id => id.endsWith('-wall'));
-  // The publishable key is meant to be public: it can only call booked_items(), which returns item ids and dates, never names.
+  const ITEMS = Object.keys(RENTALS).filter(id => !PARTS[id]);
+  // The publishable key is meant to be public: it can only read when items are held (never names) and send booking requests.
   const DB = { url: 'https://dwazctmqkrnajqmswtiy.supabase.co', key: 'sb_publishable_ZtfrALD9rvIFPSuJ7uZabw_8lTNSD2x' };
 
   const params = new URLSearchParams(location.search);
@@ -162,38 +163,87 @@
   if (fromLink) picks = clean([...picks, ...fromLink.split(',')]);
   const store = () => { try { localStorage.setItem(PICKS_KEY, JSON.stringify(picks)); } catch { /* storage blocked: the Book link still carries the picks */ } };
 
-  // The event date travels with the picks, chosen on the Rentals calendar or the Book form.
+  // The event date and times travel with the picks, chosen on the Rentals calendar or the Book form.
   const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const parseIso = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   const longDate = s => parseIso(s).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const todayIso = iso(new Date());
   const validDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseIso(s)) === s && s >= todayIso ? s : '';
+  const validTime = s => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : '';
+  const timeLabel = t => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`; };
+  // Start times run 6 AM to 11:30 PM; an event can end up to 2 AM the next day.
+  const TIMES = Array.from({ length: 36 }, (_, i) => `${String(6 + Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+  const NEXT_DAY = ['00:00', '00:30', '01:00', '01:30', '02:00'];
+  const splitTimes = s => { const [a = '', b = ''] = String(s || '').split('-'); return validTime(a) && validTime(b) ? [a, b] : ['', '']; };
   const DATE_KEY = 'bloom-date';
+  const TIME_KEY = 'bloom-time';
   let chosenDate = '';
-  try { chosenDate = validDate(localStorage.getItem(DATE_KEY)); } catch { chosenDate = ''; }
+  let [chosenStart, chosenEnd] = ['', ''];
+  try {
+    chosenDate = validDate(localStorage.getItem(DATE_KEY));
+    [chosenStart, chosenEnd] = splitTimes(localStorage.getItem(TIME_KEY));
+  } catch { /* storage blocked: the Book link still carries the date and times */ }
   chosenDate = validDate(params.get('date')) || chosenDate;
-  const storeDate = () => { try { if (chosenDate) localStorage.setItem(DATE_KEY, chosenDate); else localStorage.removeItem(DATE_KEY); } catch { /* the Book link still carries the date */ } };
+  if (params.get('time')) [chosenStart, chosenEnd] = splitTimes(params.get('time'));
+  const storeDate = () => {
+    try {
+      if (chosenDate) localStorage.setItem(DATE_KEY, chosenDate); else localStorage.removeItem(DATE_KEY);
+      if (chosenStart && chosenEnd) localStorage.setItem(TIME_KEY, `${chosenStart}-${chosenEnd}`); else localStorage.removeItem(TIME_KEY);
+    } catch { /* the Book link still carries them */ }
+  };
   storeDate();
+  const timesInOrder = () => Boolean(chosenStart && chosenEnd && (chosenEnd > chosenStart || NEXT_DAY.includes(chosenEnd)));
+  const hasTimes = () => Boolean(chosenDate && timesInOrder());
   const bookHref = () => {
-    const query = [picks.length && `picks=${picks.join(',')}`, chosenDate && `date=${chosenDate}`].filter(Boolean).join('&');
+    const query = [picks.length && `picks=${picks.join(',')}`, chosenDate && `date=${chosenDate}`, chosenStart && chosenEnd && `time=${chosenStart}-${chosenEnd}`].filter(Boolean).join('&');
     return query ? `contact.html?${query}` : 'contact.html';
   };
+  const fillTimes = (select, end) => {
+    if (!select) return;
+    select.replaceChildren(new Option('Choose a time', ''), ...TIMES.slice(end ? 1 : 0).map(t => new Option(timeLabel(t), t)),
+      ...(end ? NEXT_DAY.map(t => new Option(`${timeLabel(t)} (next day)`, t)) : []));
+  };
 
-  /* Availability from Supabase. If it can't be reached, nothing is blocked and the owner confirms dates by reply, as before. */
+  /* Availability from Supabase: when each item is held (setup to pickup), as Detroit wall-clock times.
+     If it can't be reached, nothing is blocked and requests can go out by text or email instead. */
+  const rest = (path, body, ms) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    return fetch(`${DB.url}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: { apikey: DB.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    }).then(async r => {
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw Object.assign(new Error((data && data.message) || `request failed, ${r.status}`), { status: r.status, code: data && data.code, details: data && data.details });
+      return data;
+    }).finally(() => clearTimeout(timer));
+  };
+  // Wall-clock times are compared as if they were UTC, so the visitor's own timezone never shifts them.
+  const DAY_MS = 86400000;
+  const wallMs = s => Date.parse(`${s.slice(0, 19)}Z`);
+  const clock = ms => timeLabel(new Date(ms).toISOString().slice(11, 16));
+  const toRanges = rows => rows.map(r => ({ item: r.item_id, from: wallMs(r.busy_from), until: wallMs(r.busy_until) }));
+  let rulesRequest = null;
+  const loadRules = () => {
+    rulesRequest = rulesRequest || rest('rpc/booking_rules', {}, 8000).then(rows => rows[0]);
+    rulesRequest.catch(() => { rulesRequest = null; });
+    return rulesRequest;
+  };
   const months = new Map();
-  const bookedInMonth = (year, month) => {
+  // For the calendar: which items have any hold on each day of a month.
+  const monthAvailability = (year, month) => {
     const key = `${year}-${month}`;
     if (!months.has(key)) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      const request = fetch(`${DB.url}/rest/v1/rpc/booked_items`, {
-        method: 'POST',
-        headers: { apikey: DB.key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from_date: iso(new Date(year, month, 1)), to_date: iso(new Date(year, month + 1, 0)) }),
-        signal: controller.signal
-      }).then(r => { if (!r.ok) throw new Error(`Availability ${r.status}`); return r.json(); })
-        .then(rows => rows.reduce((byDate, row) => byDate.set(row.event_date, (byDate.get(row.event_date) || new Set()).add(row.item_id)), new Map()))
-        .finally(() => clearTimeout(timer));
+      const request = rest('rpc/availability', { from_date: iso(new Date(year, month, 1)), to_date: iso(new Date(year, month + 1, 0)) }, 8000)
+        .then(rows => toRanges(rows).reduce((byDate, r) => {
+          for (let t = Date.parse(`${new Date(r.from).toISOString().slice(0, 10)}T00:00:00Z`); t < r.until; t += DAY_MS) {
+            const day = new Date(t).toISOString().slice(0, 10);
+            byDate.set(day, (byDate.get(day) || new Set()).add(r.item));
+          }
+          return byDate;
+        }, new Map()));
       request.catch(() => months.delete(key));
       months.set(key, request);
     }
@@ -205,61 +255,113 @@
 
   const pickList = document.getElementById('picks-list');
   const eventDate = document.getElementById('event_date');
+  const eventStart = document.getElementById('event_start');
+  const eventEnd = document.getElementById('event_end');
+  const pickStart = document.getElementById('pick-start');
+  const pickEnd = document.getElementById('pick-end');
+  const timePick = document.getElementById('time-pick');
   const dateStatus = document.getElementById('date-status');
   const dateNote = document.getElementById('date-note');
   const dateClear = document.getElementById('date-clear');
   const needsAvailability = Boolean(document.getElementById('date-cal') || eventDate);
   let availability = 'none'; // none | loading | ready | error
-  let bookedThatDay = new Set();
+  let rules = { setup_minutes: 120, pickup_minutes: 120 };
+  let dayRanges = [];
   let availabilityCheck = Promise.resolve();
   let checkId = 0;
+  const onChosenDay = () => { const start = Date.parse(`${chosenDate}T00:00:00Z`); return dayRanges.filter(r => r.from < start + DAY_MS && r.until > start); };
+  // What's held around the customer's event, including our setup and pickup time.
+  const takenAtTime = () => {
+    if (!hasTimes()) return new Set();
+    const start = wallMs(`${chosenDate}T${chosenStart}:00`);
+    let end = wallMs(`${chosenDate}T${chosenEnd}:00`);
+    if (end <= start) end += DAY_MS;
+    const [from, until] = [start - rules.setup_minutes * 60000, end + rules.pickup_minutes * 60000];
+    return new Set(dayRanges.filter(r => r.from < until && r.until > from).map(r => r.item));
+  };
+  const busyText = id => [...new Set(onChosenDay().filter(r => (PARTS[id] || [id]).includes(r.item)).map(r => `${clock(r.from)}–${clock(r.until)}`))].join(', ');
   const paintAvailability = () => {
-    const booked = availability === 'ready' ? bookedThatDay : new Set();
-    // A picked item stays tappable when it's booked, so it can still be removed.
+    const ready = availability === 'ready';
+    const timed = ready && hasTimes();
+    const taken = ready ? takenAtTime() : new Set();
+    // A picked item stays tappable when it's taken, so it can still be removed.
     document.querySelectorAll('[data-pick]').forEach(btn => {
       const id = btn.dataset.pick;
-      const taken = isBooked(id, booked);
-      btn.classList.toggle('is-booked', taken);
-      btn.disabled = taken && !picks.includes(id);
-      if (taken && !btn.querySelector('.pick-booked')) btn.insertAdjacentHTML('beforeend', '<span class="pick-booked">Booked that day</span>');
+      const blocked = timed && isBooked(id, taken);
+      const busy = ready ? busyText(id) : '';
+      btn.classList.toggle('is-booked', blocked);
+      btn.disabled = blocked && !picks.includes(id);
+      if (blocked && !btn.querySelector('.pick-booked')) btn.insertAdjacentHTML('beforeend', '<span class="pick-booked">Booked at that time</span>');
       const card = btn.closest('[data-pick-card]');
-      if (card) card.classList.toggle('is-booked', taken);
+      if (card) card.classList.toggle('is-booked', blocked);
+      let note = btn.parentElement.querySelector(`.pick-note[data-for="${id}"]`);
+      if (busy && !note) {
+        note = document.createElement('div');
+        note.className = 'pick-note';
+        note.dataset.for = id;
+        btn.before(note);
+      }
+      if (note) {
+        note.textContent = busy && (!timed || blocked) ? `Taken ${busy}` : '';
+        note.hidden = !note.textContent;
+      }
     });
     if (pickList) pickList.querySelectorAll('li').forEach(li => {
-      const taken = isBooked(li.dataset.id, booked);
-      li.classList.toggle('is-booked', taken);
-      li.querySelector('.pick-taken').hidden = !taken;
+      const blocked = timed && isBooked(li.dataset.id, taken);
+      li.classList.toggle('is-booked', blocked);
+      const tag = li.querySelector('.pick-taken');
+      tag.textContent = blocked ? `Taken ${busyText(li.dataset.id)}` : '';
+      tag.hidden = !blocked;
     });
-    const conflicts = picks.filter(id => isBooked(id, booked));
-    const conflictText = conflicts.length ? `${listNames(conflicts.map(id => RENTALS[id]))} ${conflicts.length === 1 ? 'isn’t' : 'aren’t'} available on ${longDate(chosenDate)}. Remove ${conflicts.length === 1 ? 'it' : 'them'} or choose another date.` : '';
+    const when = hasTimes() ? `${longDate(chosenDate)}, ${timeLabel(chosenStart)} to ${timeLabel(chosenEnd)}` : '';
+    const conflicts = timed ? picks.filter(id => isBooked(id, taken)) : [];
+    const conflictText = conflicts.length ? `${listNames(conflicts.map(id => RENTALS[id]))} ${conflicts.length === 1 ? 'isn’t' : 'aren’t'} available at that time. Remove ${conflicts.length === 1 ? 'it' : 'them'} or choose another time.` : '';
+    const orderText = chosenStart && chosenEnd && !timesInOrder() ? 'The end time needs to be after the start time.' : '';
     const unavailableText = 'We couldn’t check availability just now. You can still send your request and we’ll confirm your date.';
-    if (eventDate) eventDate.setCustomValidity(conflictText);
+    if (eventStart) eventStart.setCustomValidity(conflictText);
+    if (eventEnd) eventEnd.setCustomValidity(orderText);
     if (dateNote) {
-      dateNote.textContent = conflictText || (availability === 'error' ? unavailableText
-        : availability === 'ready' && picks.length ? `Everything you picked is free on ${longDate(chosenDate)}.` : '');
-      dateNote.className = `date-note${conflictText ? ' is-conflict' : ''}`;
+      dateNote.textContent = conflictText || orderText || (availability === 'error' ? unavailableText
+        : timed && picks.length ? `Everything you picked is free on ${when}.`
+        : ready && picks.length ? 'Choose your start and end time to check your picks.' : '');
+      dateNote.className = `date-note${conflictText || orderText ? ' is-conflict' : ''}`;
     }
     if (dateStatus) {
-      const count = Object.keys(RENTALS).filter(id => !PARTS[id] && booked.has(id)).length;
+      const busyCount = ITEMS.filter(id => onChosenDay().some(r => r.item === id)).length;
+      const takenCount = ITEMS.filter(id => taken.has(id)).length;
       dateStatus.textContent = !chosenDate ? '' : availability === 'loading' ? 'Checking availability…'
         : availability === 'error' ? unavailableText
-        : count ? `${longDate(chosenDate)}: ${count} ${count === 1 ? 'item is' : 'items are'} booked and marked below. Everything else is free.`
+        : orderText ? orderText
+        : timed ? (takenCount ? `${when}: ${takenCount} ${takenCount === 1 ? 'item is' : 'items are'} booked at that time and marked below. Everything else is free.` : `Everything is free on ${when}.`)
+        : busyCount ? `${longDate(chosenDate)}: ${busyCount} ${busyCount === 1 ? 'item has a booking' : 'items have bookings'} that day, with the times below. Choose your event times to see what’s free then.`
         : `Everything is free on ${longDate(chosenDate)}.`;
     }
     if (dateClear) dateClear.hidden = !chosenDate;
+    if (timePick) timePick.hidden = !chosenDate;
   };
   const checkDate = () => {
     const id = ++checkId;
     availability = chosenDate ? 'loading' : 'none';
     paintAvailability();
     if (!chosenDate) { availabilityCheck = Promise.resolve(); return; }
-    const day = chosenDate;
-    const d = parseIso(day);
-    availabilityCheck = bookedInMonth(d.getFullYear(), d.getMonth())
-      .then(byDate => { if (id === checkId) { bookedThatDay = byDate.get(day) || new Set(); availability = 'ready'; } },
+    const d = parseIso(chosenDate);
+    // The day before and after too, for events and setup that cross midnight.
+    const around = { from_date: iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)), to_date: iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) };
+    availabilityCheck = Promise.all([loadRules(), rest('rpc/availability', around, 8000)])
+      .then(([current, rows]) => { if (id === checkId) { if (current) rules = current; dayRanges = toRanges(rows); availability = 'ready'; } },
         () => { if (id === checkId) availability = 'error'; })
       .then(() => { if (id === checkId) paintAvailability(); });
   };
+  const setTimes = (start, end) => { chosenStart = start; chosenEnd = end; storeDate(); renderPicks(); };
+  [[pickStart, pickEnd], [eventStart, eventEnd]].forEach(([startSelect, endSelect]) => {
+    if (!startSelect) return;
+    fillTimes(startSelect, false);
+    fillTimes(endSelect, true);
+    startSelect.value = chosenStart;
+    endSelect.value = chosenEnd;
+    startSelect.addEventListener('change', () => setTimes(startSelect.value, endSelect.value));
+    endSelect.addEventListener('change', () => setTimes(startSelect.value, endSelect.value));
+  });
 
   const renderPicks = () => {
     document.querySelectorAll('[data-pick]').forEach(btn => {
@@ -282,7 +384,6 @@
         name.textContent = RENTALS[id];
         const taken = document.createElement('small');
         taken.className = 'pick-taken';
-        taken.textContent = 'Booked that day';
         taken.hidden = true;
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -312,7 +413,7 @@
   });
   store(); renderPicks();
 
-  /* Rentals page calendar: choose a date to see what's booked. Days with every wall booked are marked. */
+  /* Rentals page calendar: choose a date (and times) to see what's free. Days with bookings are marked. */
   const cal = document.getElementById('date-cal');
   if (cal) {
     document.getElementById('check-date').hidden = false;
@@ -328,13 +429,14 @@
     view = new Date(view.getFullYear(), view.getMonth(), 1);
     let focusDay = '';
     const selectable = day => day >= todayIso && day <= lastDay;
-    const markMonth = (year, month) => bookedInMonth(year, month).then(byDate => {
+    const markMonth = (year, month) => monthAvailability(year, month).then(byDate => {
       if (view.getFullYear() !== year || view.getMonth() !== month) return;
       days.querySelectorAll('.cal-day').forEach(b => {
-        const booked = byDate.get(b.dataset.date);
-        const full = Boolean(booked && WALLS.every(w => booked.has(w)));
+        const busy = byDate.get(b.dataset.date);
+        const full = Boolean(busy && WALLS.every(w => busy.has(w)));
         b.classList.toggle('walls-full', full);
-        b.setAttribute('aria-label', `${longDate(b.dataset.date)}${full ? ', all flower walls booked' : ''}`);
+        b.classList.toggle('has-bookings', Boolean(busy) && !full);
+        b.setAttribute('aria-label', `${longDate(b.dataset.date)}${full ? ', every flower wall has a booking' : busy ? ', some items have bookings' : ''}`);
       });
     }, () => {
       if (!chosenDate && dateStatus) dateStatus.textContent = 'We couldn’t load availability just now. You can still send a request and we’ll confirm your date.';
@@ -413,13 +515,14 @@
   }
   if (needsAvailability) checkDate();
 
+  /* Book page: the request is saved straight into the owner's app and holds the picks while she confirms. */
   const form = document.getElementById('inquire-form');
   if (!form) return;
   const status = document.getElementById('form-status');
   const submit = form.querySelector('[type="submit"]');
   const submitLabel = submit.querySelector('span');
   const key = form.querySelector('[name="access_key"]');
-  const ready = Boolean(key && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key.value.trim()));
+  const emailCopy = Boolean(key && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key.value.trim()));
   const alt = document.getElementById('book-alt');
   if (eventDate) {
     eventDate.min = todayIso;
@@ -428,57 +531,84 @@
   }
   // A request sent while the date is still being checked waits briefly for the answer.
   const availabilityKnown = () => availability === 'loading' ? Promise.race([availabilityCheck, new Promise(r => setTimeout(r, 3000))]) : Promise.resolve();
-  const idle = ready ? 'Send booking request' : 'Send by text';
+  const idle = 'Send booking request';
   submitLabel.textContent = idle;
-  if (ready && alt) alt.hidden = true;
+  const held = () => [...new Set(picks.flatMap(id => PARTS[id] || [id]))];
+  const holdText = s => new Date(`${s}Z`).toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-  // Without an online form service, the request goes out through the visitor's own text or email app.
+  // If the request can't be sent online, it can still go out through the visitor's own text or email app.
   const summary = () => {
     const d = new FormData(form);
     const line = (label, name) => (d.get(name) || '').toString().trim() ? `${label}: ${d.get(name).toString().trim()}` : '';
     return ['Booking request for Bloom Events',
-      line('Name', 'name'), line('Date', 'event_date'), line('Email', 'email'), line('Phone', 'phone'),
-      line('Celebrating', 'event_type'), line('Guests', 'guests'), line('Venue', 'venue'),
+      line('Name', 'name'), line('Date', 'event_date'), hasTimes() ? `Time: ${timeLabel(chosenStart)} to ${timeLabel(chosenEnd)}` : '',
+      line('Email', 'email'), line('Phone', 'phone'), line('Celebrating', 'event_type'), line('Guests', 'guests'),
+      line('Venue', 'venue'), line('Address', 'address'),
       picks.length ? `Picks: ${picks.map(id => RENTALS[id]).join(', ')}` : '',
       line('Notes', 'message')].filter(Boolean).join('\n');
   };
-  const emailLink = document.getElementById('send-email');
-  if (emailLink) emailLink.addEventListener('click', async e => {
-    e.preventDefault();
-    await availabilityKnown();
-    if (!form.reportValidity()) return;
-    location.href = `mailto:hello@bloomevents.com?subject=${encodeURIComponent('Booking request')}&body=${encodeURIComponent(summary())}`;
+  [['send-text', () => `sms:+15863604200?&body=${encodeURIComponent(summary())}`],
+    ['send-email', () => `mailto:hello@bloomevents.com?subject=${encodeURIComponent('Booking request')}&body=${encodeURIComponent(summary())}`]].forEach(([id, href]) => {
+    const link = document.getElementById(id);
+    if (link) link.addEventListener('click', async e => {
+      e.preventDefault();
+      await availabilityKnown();
+      if (form.reportValidity()) location.href = href();
+    });
   });
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
     await availabilityKnown();
     if (!form.reportValidity() || submit.disabled) return;
-    if (!ready) {
-      location.href = `sms:+15863604200?&body=${encodeURIComponent(summary())}`;
-      return;
-    }
     const data = new FormData(form);
-    if (data.get('botcheck')) return;
-    submit.disabled = true; submitLabel.textContent = 'Sending…';
-    status.textContent = ''; status.className = 'form-status';
-    form.action = 'https://api.web3forms.com/submit';
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const value = name => (data.get(name) || '').toString().trim();
+    const packages = picks.filter(id => PARTS[id]).map(id => RENTALS[id]);
+    const items = held();
+    submit.disabled = true;
+    submitLabel.textContent = 'Sending…';
+    status.textContent = '';
+    status.className = 'form-status';
     try {
-      const response = await fetch(form.action, { method: 'POST', body: data, headers: { Accept: 'application/json' }, signal: controller.signal });
-      if (!response.ok) throw new Error('Submission failed');
-      const result = await response.json();
-      if (!result.success) throw new Error('Submission failed');
+      const result = await rest('rpc/request_booking', { r: {
+        name: value('name'), email: value('email'), phone: value('phone'),
+        date: value('event_date'), start: value('event_start'), end: value('event_end'), items,
+        event_type: value('event_type'), guests: value('guests'), venue: value('venue'), address: value('address'),
+        notes: [packages.length && `Package: ${packages.join(', ')}`, value('message')].filter(Boolean).join('\n'),
+        trap: value('botcheck')
+      } }, 15000);
       status.className = 'form-status show success';
-      status.textContent = 'Thank you! Your request has been sent. We’ll confirm your date and send a quote.';
+      status.textContent = result && result.hold_until && items.length
+        ? `Thank you! Your request is in. We’re holding ${listNames(items.map(id => RENTALS[id]))} for you until ${holdText(result.hold_until)} while we confirm, and we’ll reply by email or text.`
+        : 'Thank you! Your request is in. We’ll reply by email or text to confirm your date and send a quote.';
+      if (emailCopy) fetch('https://api.web3forms.com/submit', { method: 'POST', body: data, headers: { Accept: 'application/json' } }).catch(() => {});
+      if (alt) alt.hidden = true;
       form.reset();
-      picks = []; chosenDate = ''; store(); storeDate(); renderPicks(); checkDate();
-    } catch {
+      picks = []; chosenDate = ''; chosenStart = ''; chosenEnd = '';
+      store(); storeDate(); renderPicks(); checkDate();
+    } catch (err) {
       status.className = 'form-status show error';
-      status.textContent = 'Your request could not be sent. Please try again or call (586) 360-4200.';
+      if (err.code === '23P01') {
+        const ids = /^[a-z-]+(,[a-z-]+)*$/.test(err.details || '') ? err.details.split(',') : [];
+        status.textContent = ids.length
+          ? `${listNames(ids.map(id => RENTALS[id]))} ${ids.length === 1 ? 'was' : 'were'} just booked at that time. Remove ${ids.length === 1 ? 'it' : 'them'} or choose another time.`
+          : 'Something you picked was just booked at that time. Remove it or choose another time.';
+        months.clear();
+        checkDate();
+      } else if (err.message === 'pending_limit') {
+        status.textContent = 'You already have two requests waiting for us to confirm. We’ll reply soon, or call or text (586) 360-4200.';
+      } else if (err.message === 'busy') {
+        status.textContent = 'We’re getting a lot of requests right now. Please try again a little later, or call or text (586) 360-4200.';
+      } else if (err.code === '22023') {
+        status.textContent = 'Please check your date, times and email, then try again.';
+      } else {
+        status.textContent = 'Your request couldn’t be sent online right now. You can send it by text or email instead, or call (586) 360-4200.';
+        if (alt) alt.hidden = false;
+      }
     } finally {
-      clearTimeout(timer); submit.disabled = false; submitLabel.textContent = idle;
+      submit.disabled = false;
+      submitLabel.textContent = idle;
+      status.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   });
 })();

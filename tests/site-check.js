@@ -12,7 +12,7 @@ const axeSrc = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const now = new Date();
 const booked = [{ item_id: 'ivory-wall', event_date: `${new Date(now.getFullYear(), now.getMonth() + 1, 20).toISOString().slice(0, 7)}-20` }];
 const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(now);
-const ownerBooking = { id: 1, status: 'confirmed', customer_id: 1, customer_name: 'Jane Doe', customer_phone: '586-555-0100', customer_email: 'jane@example.com', start_local: `${day}T14:00:00`, end_local: `${day}T21:00:00`, setup_minutes: 120, pickup_minutes: 120, address: '12 Main St, Macomb', venue: null, event_type: 'Wedding', guests: 80, price: 450, deposit_paid: true, notes: null, items: ['bloom-bar', 'ivory-wall'] };
+const ownerBooking = { id: 1, status: 'requested', customer_id: 1, customer_name: 'Jane Doe', customer_phone: '586-555-0100', customer_email: 'jane@example.com', start_local: `${day}T14:00:00`, end_local: `${day}T21:00:00`, setup_minutes: 120, pickup_minutes: 120, address: '12 Main St, Macomb', venue: null, event_type: 'Wedding', guests: 80, price: 450, deposit_paid: true, notes: null, items: ['bloom-bar', 'ivory-wall'], source: 'website', created_at: now.toISOString(), hold_until: new Date(now.getTime() + 72 * 3600000).toISOString() };
 const calendarLib = fs.readFileSync(require('path').join(__dirname, 'node_modules/fullcalendar/index.global.min.js'));
 const fakeSupabase = async page => {
   const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -20,6 +20,8 @@ const fakeSupabase = async page => {
   await page.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', r => {
     const path = new URL(r.request().url()).pathname;
     if (path.endsWith('/rpc/booked_items')) return json(r, booked);
+    if (path.endsWith('/rpc/availability')) return json(r, booked.map(x => ({ item_id: x.item_id, busy_from: `${x.event_date}T12:00:00`, busy_until: `${x.event_date}T23:00:00` })));
+    if (path.endsWith('/rpc/booking_rules')) return json(r, [{ setup_minutes: 120, pickup_minutes: 120 }]);
     if (path.endsWith('/rpc/am_i_admin')) return json(r, true);
     if (path.endsWith('/owner_bookings')) return json(r, [ownerBooking]);
     if (path.endsWith('/settings')) return json(r, [{ setup_minutes: 120, pickup_minutes: 120 }]);

@@ -30,8 +30,8 @@
 <link rel="apple-touch-icon" href="bloom-events-apple-touch-icon.png">
 
 <link rel="stylesheet" href="styles.css?v=20260908-natural2">
-<link rel="stylesheet" href="refinements.css?v=20260925-calendar">
-<script src="site.js?v=20260925-calendar" defer></script>
+<link rel="stylesheet" href="refinements.css?v=20260926-times">
+<script src="site.js?v=20260926-times" defer></script>
 
 </head>
 <body class="contact-page">
@@ -52,7 +52,7 @@
 </nav>
 
 <main id="main-content">
-<section class="page-hero book-hero"><div class="page-hero-inner"><div class="section-eyebrow">Book</div><h1>Book your date</h1><p class="page-hero-subtitle">Tell us when and where. We’ll confirm availability and send you a quote. Nothing is charged online.</p></div></section>
+<section class="page-hero book-hero"><div class="page-hero-inner"><div class="section-eyebrow">Book</div><h1>Book your date</h1><p class="page-hero-subtitle">Tell us when and where. We’ll hold your picks while we confirm, then send you a quote. Nothing is charged online.</p></div></section>
 
 <section class="book" id="inquire">
   <div class="container book-grid">
@@ -74,22 +74,27 @@
 
       <div class="form-row">
         <div class="form-field"><label for="name">Your name *</label><input type="text" id="name" name="name" required autocomplete="name" maxlength="120"></div>
+        <div class="form-field"><label for="email">Email *</label><input type="email" id="email" name="email" required autocomplete="email" maxlength="254" pattern="[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}"></div>
+      </div>
+      <div class="form-row form-row-when">
         <div class="form-field"><label for="event_date">Event date *</label><input type="date" id="event_date" name="event_date" required></div>
+        <div class="form-field"><label for="event_start">Starts *</label><select id="event_start" name="event_start" required></select></div>
+        <div class="form-field"><label for="event_end">Ends *</label><select id="event_end" name="event_end" required></select></div>
       </div>
       <div class="form-row">
-        <div class="form-field"><label for="email">Email *</label><input type="email" id="email" name="email" required autocomplete="email" maxlength="254"></div>
         <div class="form-field"><label for="phone">Phone</label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="40"></div>
+        <div class="form-field"><label for="guests">Guest count</label><input type="number" id="guests" name="guests" min="1" max="99999" step="1" inputmode="numeric"></div>
       </div>
       <div class="form-row">
         <div class="form-field"><label for="event_type">What are you celebrating?</label><select id="event_type" name="event_type"><option value="">Choose one</option><option>Wedding</option><option>Bridal shower</option><option>Baby shower</option><option>Birthday</option><option>Engagement</option><option>Graduation</option><option>Corporate event</option><option>Other celebration</option></select></div>
-        <div class="form-field"><label for="guests">Guest count</label><input type="number" id="guests" name="guests" min="1" max="100000" step="1" inputmode="numeric"></div>
+        <div class="form-field"><label for="venue">Venue name</label><input type="text" id="venue" name="venue" maxlength="200" placeholder="Or tell us if you’re still looking"></div>
       </div>
-      <div class="form-field"><label for="venue">Venue and city</label><input type="text" id="venue" name="venue" maxlength="300" placeholder="Or tell us if you’re still looking"></div>
-      <div class="form-field"><label for="message">Anything else?</label><textarea id="message" name="message" rows="4" maxlength="5000" placeholder="Colors, extras, setup times or questions"></textarea></div>
+      <div class="form-field"><label for="address">Event address</label><input type="text" id="address" name="address" maxlength="300" autocomplete="street-address"></div>
+      <div class="form-field"><label for="message">Anything else?</label><textarea id="message" name="message" rows="4" maxlength="4000" placeholder="Colors, extras, setup times or questions"></textarea></div>
 
-      <p class="inquiry-privacy" id="inquiry-privacy">We use your details to reply about your event. See our <a href="privacy.html">Privacy policy</a> and <a href="booking-policy.html">Booking &amp; cancellation policy</a>. A request doesn’t reserve your date until we confirm it.</p>
-      <button type="submit" class="form-submit"><span>Send by text</span></button>
-      <p class="book-alt" id="book-alt">Online sending is coming soon, so this opens your messages app with your request filled in. <a href="#" id="send-email">Email it instead</a></p>
+      <p class="inquiry-privacy" id="inquiry-privacy">We use your details to reply about your event. See our <a href="privacy.html">Privacy policy</a> and <a href="booking-policy.html">Booking &amp; cancellation policy</a>. Sending a request holds your picks for a few days while we confirm; it isn’t a booking until we do.</p>
+      <button type="submit" class="form-submit"><span>Send booking request</span></button>
+      <p class="book-alt" id="book-alt" hidden>Send it <a href="#" id="send-text">by text</a> or <a href="#" id="send-email">by email</a> instead.</p>
       <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
     </form>
   </div>

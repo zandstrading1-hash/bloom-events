@@ -805,6 +805,8 @@ body.has-picks .book-bar { display: block; position: fixed; right: 1.5rem; botto
 .picks-list li.is-booked { box-shadow: inset 3px 0 0 var(--rose); }
 .picks-list li > span { flex: 1; }
 .pick-taken { color: var(--rose); font-size: .8125rem; white-space: nowrap; }
+.picks-list li:has(.pick-taken:not([hidden])) { flex-wrap: wrap; }
+.picks-list .pick-taken:not([hidden]) { order: 3; flex-basis: 100%; }
 .pick-taken[hidden] { display: none; }
 .date-note { margin: 0; font-size: .9375rem; color: var(--ink); }
 .date-note:empty { display: none; }
@@ -817,4 +819,26 @@ body.has-picks .book-bar { display: block; position: fixed; right: 1.5rem; botto
 @media (max-width: 700px) {
   .date-check { padding-block: 2.25rem .5rem; }
   .cal { padding: .75rem; }
+}
+
+/* ============ Times: Rentals page pickers and Book page fields ============ */
+.time-pick { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.time-pick[hidden] { display: none; }
+.time-field { display: grid; gap: .3rem; font-size: .9rem; font-weight: 500; color: var(--ink); }
+.time-field select { min-height: 44px; min-width: 10rem; padding: .5rem .7rem; border: 1px solid #dcc3cd; border-radius: 8px; background: #fff; color: var(--ink); font: 1rem Arial, Helvetica, sans-serif; }
+.time-field select:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }
+.pick-note { margin: 0 0 .5rem; font-size: .8125rem; color: #8e2f53; }
+.pick-note[hidden] { display: none; }
+.package .pick-note { margin-top: 1.2rem; text-align: center; }
+.package .pick-note + .pick-btn { margin-top: 0; }
+.cal-day { position: relative; }
+.cal-day.has-bookings::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--rose); }
+.cal-day[aria-pressed="true"].has-bookings::after { background: #fff; }
+.cal-key-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--rose); }
+.cal-key .cal-key-swatch { margin-left: .6rem; }
+.book-form .form-row-when { grid-template-columns: 1.3fr 1fr 1fr; }
+.book-alt[hidden] { display: none; }
+@media (max-width: 700px) {
+  .book-form .form-row-when { grid-template-columns: 1fr 1fr; }
+  .book-form .form-row-when .form-field:first-child { grid-column: 1 / -1; }
 }

@@ -10,8 +10,15 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
 (async () => {
   const b = await chromium.launch(launchOpts);
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
-  // Nothing booked, so this flow never depends on real bookings (calendar-flow.js covers booked dates).
-  await ctx.route('**/rest/v1/rpc/booked_items', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  // Nothing booked, so this flow never depends on real bookings (calendar-flow.js covers booked times).
+  const sent = [];
+  const fake = r => {
+    const path = new URL(r.request().url()).pathname;
+    if (path.endsWith('/request_booking')) sent.push(JSON.parse(r.request().postData()).r);
+    const body = path.endsWith('/booking_rules') ? [{ setup_minutes: 120, pickup_minutes: 120 }] : path.endsWith('/request_booking') ? { hold_until: '2027-06-01T15:00:00' } : [];
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  };
+  await ctx.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', fake);
   const p = await ctx.newPage();
   const cdp = await ctx.newCDPSession(p); await cdp.send('Page.enable');
   const navs = []; cdp.on('Page.frameRequestedNavigation', e => navs.push(e.url));
@@ -44,7 +51,7 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   items = await p.$$eval('#picks-list li span', els => els.map(e => e.textContent));
   assert(items.length === 2 && await p.inputValue('#rentals-field') === 'Greenery wall, Ivory flower wall', 'remove works');
   assert(await p.isHidden('#picks-empty'), 'empty message hidden when picks exist');
-  assert(await p.textContent('.form-submit span') === 'Send by text', 'submit says Send by text without a form key');
+  assert(await p.textContent('.form-submit span') === 'Send booking request', 'submit sends the request online');
   // required fields block sending
   const before = logs.length;
   await p.click('.form-submit');
@@ -52,12 +59,16 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   // fill and send
   await p.fill('#name', 'Test Person'); await p.fill('#email', 'test@example.com'); await p.fill('#phone', '555-0100');
   await p.fill('#event_date', '2027-06-12'); await p.selectOption('#event_type', 'Bridal shower'); await p.fill('#guests', '60');
-  await p.fill('#venue', 'The Palazzo Grande, Shelby Twp'); await p.fill('#message', 'Pink and ivory');
-  await p.click('.form-submit'); await p.waitForTimeout(800);
-  const smsUrl = navs.find(u => u.startsWith('sms:')) || '';
-  const body = smsUrl ? decodeURIComponent(smsUrl.split('body=')[1] || '') : '';
-  console.log('   sms body:\n' + body.split('\n').map(l => '     ' + l).join('\n'));
-  assert(body.includes('Picks: Greenery wall, Ivory flower wall') && body.includes('Date: 2027-06-12') && body.includes('Name: Test Person'), 'text message filled with the request');
+  await p.fill('#venue', 'The Palazzo Grande'); await p.fill('#address', '4 Hall Rd, Shelby Twp'); await p.fill('#message', 'Pink and ivory');
+  await p.click('.form-submit');
+  assert(!sent.length && await p.evaluate(() => !document.getElementById('event_start').checkValidity()), 'start and end time are required');
+  await p.selectOption('#event_start', '14:00'); await p.selectOption('#event_end', '21:00');
+  await p.click('.form-submit');
+  await p.waitForFunction(() => document.getElementById('form-status').classList.contains('success'));
+  const r = sent[0] || {};
+  assert(r.name === 'Test Person' && r.date === '2027-06-12' && r.start === '14:00' && r.end === '21:00' && r.items.join() === 'greenery-wall,ivory-wall' && r.address === '4 Hall Rd, Shelby Twp', 'request sent online with the picks, date and times: ' + JSON.stringify(r));
+  assert((await p.textContent('#form-status')).includes('holding Greenery wall and Ivory flower wall'), 'visitor told their picks are held');
+  assert(!navs.some(u => u.startsWith('sms:')), 'no text message needed when it sends online');
   // link fallback + dedupe + unknown ids
   const p2 = await ctx.newPage();
   await p2.evaluate(() => {}).catch(() => {});
@@ -66,7 +77,7 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   assert(items2.filter(t => t === 'Red rose wall').length === 1 && !items2.some(t => /not-a-wall/.test(t)), 'link picks deduped, unknown ignored: ' + items2);
   // desktop: bar hidden until something is picked
   const d = await b.newPage({ viewport: { width: 1280, height: 800 } });
-  await d.route('**/rest/v1/rpc/booked_items', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await d.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', fake);
   await d.goto(BASE + '/services.html', { waitUntil: 'networkidle' });
   assert(await d.isHidden('.book-bar'), 'desktop: no floating bar with nothing picked');
   await d.click('[data-pick="pink-ombre-wall"]');
