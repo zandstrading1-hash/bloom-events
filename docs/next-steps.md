@@ -13,15 +13,15 @@ These need real answers; nothing on the site should be guessed.
 5. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
 6. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
 
-## Availability calendar
+## Availability calendar and Bloom Bookings
 
-Built: the Rentals page calendar, booked-item blocking on the Rentals and Book pages, the owner page (`admin.html`) and the keep-alive GitHub Action. See the Availability calendar section of the README for how it works and how to add an owner email or a new rental.
+Built: the Rentals page calendar, booked-item blocking on the Rentals and Book pages, the keep-alive GitHub Action, and Bloom Bookings (`owner/`), the owner's home-screen app with times, customers, addresses and lists. See the README for how they work and how to add an account.
 
-- **Supabase project:** `dwazctmqkrnajqmswtiy` ("Bloom Events"), in its own Supabase account so it doesn't count against the zandstrading1-hash account's two free projects. The Supabase connector in Claude is still connected to the other account, so database changes go through the Supabase dashboard (SQL editor), not the connector.
-- **Owner sign-in:** Supabase's built-in email sends a sign-in link (it can't send codes without custom SMTP), only to members of the project's Supabase organization, 2 emails an hour. The Supabase account's email is on the owner list. To let the Bloom Events owner sign in with their own email, invite it to the Supabase organization and add it to `private.admins`.
-- **Custom domain:** if the site moves off GitHub Pages, update Site URL and Redirect URLs under Authentication, URL Configuration in Supabase, or sign-in links will go to the old address.
-- **No automatic buffer days.** If a wall needs the day before or after for delivery and pickup, the owner marks those days too. Ask the owner whether that should be automatic.
-- **Privacy page:** the draft should mention that confirmed bookings (customer name, date, items, notes) are stored with Supabase.
+- **Supabase project:** `dwazctmqkrnajqmswtiy` ("Bloom Events"), in its own Supabase account (zuhairmikhail12@gmail.com) so it doesn't count against the zandstrading1-hash account's two free projects. The Supabase connector in Claude is connected to the other account, so database changes go through the Supabase dashboard SQL editor.
+- **Her login:** her email address is still needed. Create her account in Supabase (see the README), or invite her email to the Supabase organization so "Email me a sign-in link" works for her too.
+- **Next (Phase 2):** on the website, customers choose a start and end time and see which items are free then; requests are saved straight into the app as "On hold" and hold their items, expiring after about 3 days unless she confirms (a scheduled database job); a requests inbox with Confirm and Decline; spam limits (a hidden trap field, a couple of pending requests per email or phone).
+- **Later (Phase 3):** new-request notifications on her phone, her bookings in her phone's own calendar through a private link, and deposit and payment tracking.
+- **Privacy page:** the draft should mention that bookings (customer name, phone, email, event address, date, items, notes) are stored with Supabase.
 
 ## Logo
 
@@ -30,4 +30,4 @@ Built: the Rentals page calendar, booked-item blocking on the Rentals and Book p
 
 ## Tests
 
-`tests/` has four browser checks: booking flow, availability calendar, owner page, and every page at four widths with axe. See the Tests section of the README.
+`tests/` has four browser checks: booking flow, availability calendar, the owner app, and every page at four widths with axe. See the Tests section of the README.

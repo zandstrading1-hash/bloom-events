@@ -17,8 +17,8 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 - HTML files contain the website pages.
 - `styles.css` and `refinements.css` contain the styling.
 - `site.js` handles navigation, gallery interactions, rental picks, the availability calendar and the booking request.
-- `admin.html` and `admin.js` are the owner's bookings page (not linked anywhere, hidden from search engines).
-- `supabase/schema.sql` sets up the availability database; `.github/workflows/keep-calendar-awake.yml` keeps it from pausing.
+- `owner/` is Bloom Bookings, the owner's app for bookings, customers and the calendar. It isn't linked from the site and is hidden from search engines; `admin.html` just forwards to it.
+- `supabase/schema.sql` sets up the bookings database; `.github/workflows/keep-calendar-awake.yml` keeps it from pausing.
 - `assets/` contains website-ready photos and videos.
 - `design/` holds the logo generator and logo concepts, `tests/` the browser checks, `supabase/` the database setup, and `docs/next-steps.md` the open questions. None of these are part of the website; don't deploy them.
 
@@ -44,15 +44,30 @@ On the Rentals page, visitors tap “Book this” on any flower wall, rental or 
 
 ## Availability calendar
 
-Bookings live in a free Supabase project (`dwazctmqkrnajqmswtiy`). The site's address and publishable key for it are in `DB` in `site.js`. That key is meant to be public: with it, visitors can only call `booked_items()`, which returns item ids and dates, never names or notes.
+Bookings live in a free Supabase project (`dwazctmqkrnajqmswtiy`): customers, bookings with start and end times, and the items each booking holds. The site's address and publishable key for it are in `DB` in `site.js`. That key is meant to be public: with it, visitors can only call `booked_items()`, which returns item ids and dates, never names, addresses or times.
 
 - **Rentals page:** "Check your date" shows a month calendar. Choosing a date marks anything booked that day and stops it being added. A package is blocked when one of its parts is booked (`PARTS` in `site.js`). Days with every flower wall booked are marked. The date carries to the Book page.
 - **Book page:** the date is checked against the picks. A booked pick is flagged and the request can't be sent until it's removed or the date changes.
 - **If Supabase can't be reached** (including if the free project pauses), nothing is blocked and requests go out as before.
-- **Owner page (`admin.html`):** enter your email, tap the sign-in link Supabase emails you, then tap a day, check the items to book with the customer's name, or tap Unbook. Only emails listed in `private.admins` can see or change bookings. Supabase's built-in email only delivers to members of the Supabase organization (2 emails an hour), so an owner email must be a team member there, or custom email sending (SMTP) must be set up. The link returns to the page's address, which must be listed under Authentication, URL Configuration in Supabase; update it there if the site moves to its own domain.
-- **Adding an owner email:** in the Supabase SQL editor, run `insert into private.admins (email) values ('name@example.com');` (lowercase).
-- **Adding a new rental:** add it to `RENTALS` in `site.js`, add its `data-pick` button in `services.html`, and add its id to the `item_id` check in `supabase/schema.sql` (then run that file again in the SQL editor). A new package also needs its parts in `PARTS`.
+- **An item is held from setup to pickup.** Each booking has a start and end time (Detroit time; an end before the start means the next day) plus setup and pickup minutes, 2 hours each by default and changeable in the app. The database refuses any booking that would hold the same item at an overlapping time, including "On hold" bookings. Cancelled bookings free their items.
+- **Adding a new rental:** add it to `RENTALS` in `site.js`, add its `data-pick` button in `services.html`, and add its id to the `item_id` check on `booking_items` in `supabase/schema.sql`. Change that check by hand in the SQL editor too, because `create table if not exists` won't alter an existing table. A new package also needs its parts in `PARTS`.
+- **Changing the database:** `supabase/schema.sql` is safe to run more than once. The browser tests fake Supabase, so SQL changes need their own check; the current rules were tested on a local Postgres 17 before going live.
 - **Keeping it awake:** Supabase pauses free projects after about a week with little activity. The `Keep calendar awake` GitHub Action looks up booked dates four times a day. If a lookup fails, the run fails and GitHub emails the repository owner; resume the project from the Supabase dashboard. Because this repository is public, GitHub would turn the schedule off after 60 days without commits, so after 45 quiet days the Action commits a dated `.github/keepalive` file.
+
+## Bloom Bookings (the owner's app)
+
+Open https://zandstrading1-hash.github.io/bloom-events/owner/ and sign in with an email and password. On a phone, add it to the home screen (iPhone: Safari's Share button, then "Add to Home Screen"; Android: Chrome's "Install app") and it opens full screen like any app. It keeps a copy of its screens so it opens without signal; bookings always load live.
+
+- **Calendar:** month, week and list views in Detroit time, whatever the phone's timezone. In month view, tap a day to see its bookings underneath; in week view, tap a time to start a booking there.
+- **Bookings:** add or edit a booking with the customer (pick an existing one or type a new one), date, start and end time, setup and pickup time, items, address, venue, event type, guests, price, deposit paid, status and notes. While you fill it in, items already held around that time are marked and can't be checked. A booking can be confirmed (if on hold), cancelled, restored or deleted, and its address opens in Maps.
+- **Lists:** upcoming, past and cancelled bookings, searchable by name, phone, address, venue or notes.
+- **Customers:** everyone with a booking or added by hand, with call, text and email buttons, notes and their booking history.
+- **More:** install instructions, default setup and pickup time, change password, sign out.
+
+Accounts:
+
+- **Public sign-ups are off,** so nobody can create an account from the app. To add someone: in Supabase go to Authentication, Users, Add user, Create new user, enter their email and a password, and check "Auto Confirm User". Then, in the SQL editor, run `insert into private.admins (email) values ('name@example.com');` (lowercase). Only emails in `private.admins` can see or change anything.
+- **Forgot password or first time:** "Email me a sign-in link" on the sign-in screen sends a link, then the app asks for a new password. Supabase's built-in email only delivers to members of the Supabase organization (2 emails an hour); for anyone else, reset the password in Authentication, Users. The link returns to `owner/`, which must stay listed under Authentication, URL Configuration in Supabase; update it there if the site moves to its own domain.
 
 ## Tests
 
@@ -65,7 +80,7 @@ npx playwright install chromium   # skip if a Chromium is available; set CHROMIU
 npm test
 ```
 
-`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers booked dates on the Rentals and Book pages and the fallback when Supabase is down; `admin-flow.js` covers the owner page (sign-in, booking, unbooking, expired sign-ins); `site-check.js` loads every page, including the owner page signed in and out, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
+`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers booked dates on the Rentals and Book pages and the fallback when Supabase is down; `owner-flow.js` covers the owner app (sign-in, calendar, booking form and conflicts, lists, customers, settings, password, home-screen install and offline start) on a phone set to Tokyo time; `site-check.js` loads every page, including the owner app signed out, signed in and with the booking form open, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
 
 ## Publication status
 
