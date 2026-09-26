@@ -93,6 +93,7 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 .badge.cancelled, .badge.declined, .badge.expired { background: #eee9eb; color: #5d5157; }
 .empty { margin: 1rem 0; text-align: center; color: var(--muted); }
 .more { justify-self: center; }
+.decline-all { justify-self: end; }
 
 /* Sheets (booking, customer, forms) */
 .sheet { width: 100%; max-width: 40rem; max-height: 100dvh; margin: auto; padding: 0; border: 0; border-radius: 16px; background: var(--bg); color: var(--ink); box-shadow: 0 20px 60px rgba(75, 41, 55, .3); }

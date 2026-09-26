@@ -209,10 +209,11 @@
   });
 
   const fact = (label, value) => el('div', {}, el('dt', { text: label }), el('dd', {}, value));
+  const plainEmail = email => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(email || '');
   const contactLinks = (phone, email, message = '') => el('div', { class: 'contact' },
     phone && el('a', { class: 'btn small', href: `tel:${phone.replace(/[^\d+]/g, '')}`, text: 'Call' }),
     phone && el('a', { class: 'btn small', href: `sms:${phone.replace(/[^\d+]/g, '')}${message ? `?&body=${encodeURIComponent(message)}` : ''}`, text: 'Text' }),
-    email && el('a', { class: 'btn small', href: `mailto:${email}${message ? `?subject=${encodeURIComponent('Your Bloom Events booking request')}&body=${encodeURIComponent(message)}` : ''}`, text: 'Email' }));
+    plainEmail(email) && el('a', { class: 'btn small', href: `mailto:${email}${message ? `?subject=${encodeURIComponent('Your Bloom Events booking request')}&body=${encodeURIComponent(message)}` : ''}`, text: 'Email' }));
   const badge = status => status === 'confirmed' ? null : el('span', { class: `badge ${status}`, text: STATUS[status] || status });
 
   /* Tabs */
@@ -229,11 +230,16 @@
     if (tab === 'more') paintInstall();
   };
   document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go(b.dataset.tab)));
-  const countRequests = () => db('/rest/v1/owner_bookings?select=id&status=eq.requested&limit=100').then(rows => {
+  let countId = 0;
+  const countRequests = () => {
+    const id = ++countId;
+    return db('/rest/v1/owner_bookings?select=id&status=eq.requested&source=eq.website&limit=100').then(rows => {
+    if (id !== countId) return;
     const n = rows.length;
     [$('tab-requests'), $('requests-count')].forEach(badge => { badge.hidden = !n; badge.textContent = n; });
     $('tab-requests').setAttribute('aria-label', `${n} request${n === 1 ? '' : 's'} waiting`);
-  }).catch(() => {});
+    }).catch(() => {});
+  };
   const refresh = () => {
     countRequests();
     if (calendar) calendar.refetchEvents();
@@ -355,9 +361,10 @@
   };
   const changeStatus = async (row, status, done) => {
     try {
-      await db(`/rest/v1/bookings?id=eq.${row.id}`, { method: 'PATCH', body: status === 'confirmed' ? { status, hold_until: null } : { status }, prefer: 'return=minimal' });
+      const stillWaiting = row.status === 'requested' ? '&status=eq.requested' : '';
+      const changed = await db(`/rest/v1/bookings?id=eq.${row.id}${stillWaiting}`, { method: 'PATCH', body: status === 'confirmed' ? { status, hold_until: null } : { status }, prefer: 'return=representation' });
       close(bookingDialog);
-      toast(done);
+      toast(changed && changed.length ? done : 'This request changed in the meantime (it may have expired), so nothing was changed. Here’s how it stands now.');
       refresh();
     } catch (e) {
       if (e.status !== 401) toast(e.code === '23P01' ? 'Those items are booked by someone else at that time now, so this can’t be restored.' : `Couldn’t update the booking (${e.message}).`);
@@ -524,7 +531,7 @@
     const now = nowWall();
     const query = search(['customer_name', 'customer_phone', 'address', 'venue', 'notes'], $('booking-search').value);
     const where = {
-      requests: 'status=eq.requested&order=created_at.desc,id.desc',
+      requests: 'status=eq.requested&source=eq.website&order=created_at.desc,id.desc',
       upcoming: `status=in.(requested,confirmed)&end_local=gte.${now}&order=start_local.asc,id.asc`,
       past: `status=in.(requested,confirmed)&end_local=lt.${now}&order=start_local.desc,id.desc`,
       cancelled: 'status=in.(cancelled,declined,expired)&order=start_local.desc,id.desc'
@@ -536,6 +543,7 @@
       if (reset) $('booking-list').replaceChildren(...page.map(bookingRow)); else $('booking-list').append(...page.map(bookingRow));
       listOffset += page.length;
       $('booking-more').hidden = rows.length <= PAGE;
+      $('decline-all').hidden = !(listKind === 'requests' && !query && page.length > 1);
       const empty = reset && !page.length;
       $('booking-empty').hidden = !empty;
       $('booking-empty').textContent = query ? 'No bookings match your search.'
@@ -550,6 +558,16 @@
     loadBookings(true);
   }));
   $('booking-search').addEventListener('input', debounce(() => loadBookings(true), 300));
+  $('decline-all').addEventListener('click', async () => {
+    if (!confirm('Decline every website request that’s waiting? Their items become free again.')) return;
+    try {
+      const declined = await db('/rest/v1/bookings?source=eq.website&status=eq.requested', { method: 'PATCH', body: { status: 'declined' }, prefer: 'return=representation' });
+      toast(`${declined.length} request${declined.length === 1 ? '' : 's'} declined`);
+      refresh();
+    } catch (e) {
+      if (e.status !== 401) toast(e.status ? `Couldn’t decline them (${e.message}).` : 'You’re offline, so this can’t be done yet.');
+    }
+  });
   $('booking-more').addEventListener('click', () => loadBookings(false));
 
   /* Customers */

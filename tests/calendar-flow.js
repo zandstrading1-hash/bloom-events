@@ -130,6 +130,8 @@ const requests = s => s.log.filter(l => l.path.endsWith('/rpc/request_booking'))
   assert((await p.textContent('#picks-list li[data-id="ivory-wall"] .pick-taken')) === 'Taken 12 PM–11 PM', 'taken pick flagged with its times');
   assert((await p.textContent('#date-note')).startsWith('Ivory flower wall isn’t available at that time'), 'note explains the clash');
   await p.fill('#name', 'Test Person');
+  await p.fill('#email', 'a?b@example.com');
+  assert(await p.$eval('#email', el => el.validity.patternMismatch), 'odd characters in an email are caught before sending');
   await p.fill('#email', 'test@example.com');
   await p.click('.form-submit');
   await p.waitForTimeout(400);

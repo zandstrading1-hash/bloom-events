@@ -231,7 +231,8 @@ begin
     set customer_id = v_customer, status = v_status, event_start = v_start, event_end = v_end, setup_minutes = v_setup, pickup_minutes = v_pickup,
       address = nullif(trim(b ->> 'address'), ''), venue = nullif(trim(b ->> 'venue'), ''), event_type = nullif(b ->> 'event_type', ''),
       guests = nullif(b ->> 'guests', '')::int, price = nullif(b ->> 'price', '')::numeric,
-      deposit_paid = coalesce((b ->> 'deposit_paid')::boolean, false), notes = nullif(trim(b ->> 'notes'), '')
+      deposit_paid = coalesce((b ->> 'deposit_paid')::boolean, false), notes = nullif(trim(b ->> 'notes'), ''),
+      hold_until = null
     where id = v_id;
     if not found then
       raise exception 'Booking not found' using errcode = 'P0002';
@@ -315,16 +316,22 @@ revoke all on function public.booking_rules() from public;
 grant execute on function public.booking_rules() to anon, authenticated;
 
 -- Booking requests from the website, saved as holds ("requested") that keep their items until the owner
--- confirms or declines, or hold_until passes. Anyone can call this, so it checks everything itself.
+-- confirms or declines, or hold_until passes. Anyone can call this, so it checks everything itself, never
+-- changes existing customers, and never passes database error details (which can include whole rows) back.
 create or replace function public.request_booking(r jsonb) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  v_name text := trim(coalesce(r ->> 'name', ''));
+  v_name text := regexp_replace(trim(coalesce(r ->> 'name', '')), '\s+', ' ', 'g');
   v_email text := lower(trim(coalesce(r ->> 'email', '')));
   v_phone text := nullif(trim(coalesce(r ->> 'phone', '')), '');
   v_digits text := regexp_replace(coalesce(r ->> 'phone', ''), '\D', '', 'g');
-  v_items text[] := array(select distinct jsonb_array_elements_text(coalesce(r -> 'items', '[]'::jsonb)));
+  v_address text := nullif(trim(coalesce(r ->> 'address', '')), '');
+  v_venue text := nullif(trim(coalesce(r ->> 'venue', '')), '');
+  v_type text := nullif(trim(coalesce(r ->> 'event_type', '')), '');
+  v_notes text := nullif(trim(coalesce(r ->> 'notes', '')), '');
+  v_guests text := coalesce(r ->> 'guests', '');
+  v_items text[];
   v_today date := (now() at time zone 'America/Detroit')::date;
   v_rules public.settings;
   v_day date;
@@ -334,6 +341,7 @@ declare
   v_end timestamptz;
   v_hold timestamptz;
   v_customer bigint;
+  v_customer_phone text;
   v_id bigint;
   v_taken text[];
 begin
@@ -345,22 +353,35 @@ begin
     v_day := (r ->> 'date')::date;
     v_start_time := (r ->> 'start')::time;
     v_end_time := (r ->> 'end')::time;
+    v_items := array(select distinct jsonb_array_elements_text(coalesce(r -> 'items', '[]'::jsonb)));
   exception when others then
     raise exception 'invalid_request' using errcode = '22023';
   end;
-  if v_name = '' or char_length(v_name) > 200 or char_length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+  -- The email pattern keeps out characters that would change a mailto: link in the owner app.
+  if v_name = '' or char_length(v_name) > 200 or char_length(v_email) > 254
+     or v_email !~ '^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$'
+     or char_length(coalesce(v_phone, '')) > 40 or char_length(coalesce(v_address, '')) > 300
+     or char_length(coalesce(v_venue, '')) > 200 or char_length(coalesce(v_type, '')) > 100
+     or char_length(coalesce(v_notes, '')) > 4500 or (v_guests <> '' and v_guests !~ '^[1-9][0-9]{0,4}$')
+     or cardinality(v_items) > 10
      or v_day is null or v_start_time is null or v_end_time is null or v_day < v_today or v_day > v_today + 550 then
     raise exception 'invalid_request' using errcode = '22023';
   end if;
+
+  -- One request at a time, so the limits below hold even when many arrive at once.
+  perform pg_advisory_xact_lock(hashtext('bloom-request-booking'));
   perform private.expire_holds();
 
-  -- Spam limits: two waiting requests per email or phone, and at most ten new requests an hour overall.
+  -- Spam limits: two waiting requests per email or phone; overall at most ten new website requests an hour,
+  -- thirty a day, and thirty waiting at once, so a script can't hold the whole calendar.
   if (select count(*) from public.bookings b join public.customers c on c.id = b.customer_id
       where b.source = 'website' and b.status = 'requested'
         and (c.email = v_email or (char_length(v_digits) >= 7 and regexp_replace(coalesce(c.phone, ''), '\D', '', 'g') = v_digits))) >= 2 then
     raise exception 'pending_limit' using errcode = 'P0001';
   end if;
-  if (select count(*) from public.bookings b where b.source = 'website' and b.created_at > now() - interval '1 hour') >= 10 then
+  if (select count(*) from public.bookings b where b.source = 'website' and b.created_at > now() - interval '1 hour') >= 10
+     or (select count(*) from public.bookings b where b.source = 'website' and b.created_at > now() - interval '1 day') >= 30
+     or (select count(*) from public.bookings b where b.source = 'website' and b.status = 'requested') >= 30 then
     raise exception 'busy' using errcode = 'P0001';
   end if;
 
@@ -375,21 +396,31 @@ begin
     raise exception 'Already booked at that time' using errcode = '23P01', detail = array_to_string(v_taken, ',');
   end if;
 
-  select c.id into v_customer from public.customers c where c.email = v_email order by c.id limit 1;
-  if v_customer is null then
-    insert into public.customers (name, phone, email) values (v_name, v_phone, v_email) returning id into v_customer;
-  else
-    update public.customers set phone = coalesce(phone, v_phone) where id = v_customer;
+  -- A returning customer is matched only on the same name and email, and is never changed from here.
+  -- A different phone number is noted on the request instead.
+  select c.id, c.phone into v_customer, v_customer_phone from public.customers c
+  where c.email = v_email and lower(regexp_replace(trim(c.name), '\s+', ' ', 'g')) = lower(v_name)
+  order by c.id limit 1;
+  if v_customer is not null and v_phone is not null and regexp_replace(coalesce(v_customer_phone, ''), '\D', '', 'g') <> v_digits then
+    v_notes := concat_ws(E'\n', 'Phone given with this request: ' || v_phone, v_notes);
   end if;
   v_hold := now() + make_interval(hours => v_rules.hold_hours);
-  insert into public.bookings (customer_id, status, source, event_start, event_end, setup_minutes, pickup_minutes, hold_until, address, venue, event_type, guests, notes)
-  values (v_customer, 'requested', 'website', v_start, v_end, v_rules.setup_minutes, v_rules.pickup_minutes, v_hold,
-    nullif(trim(r ->> 'address'), ''), nullif(trim(r ->> 'venue'), ''), nullif(trim(r ->> 'event_type'), ''),
-    case when coalesce(r ->> 'guests', '') ~ '^[1-9][0-9]{0,4}$' then (r ->> 'guests')::int end,
-    nullif(trim(r ->> 'notes'), ''))
-  returning id into v_id;
-  -- The conflict target matters: without it an overlap would be skipped silently instead of refused.
-  insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict (booking_id, item_id) do nothing;
+  begin
+    if v_customer is null then
+      insert into public.customers (name, phone, email) values (v_name, v_phone, v_email) returning id into v_customer;
+    end if;
+    insert into public.bookings (customer_id, status, source, event_start, event_end, setup_minutes, pickup_minutes, hold_until, address, venue, event_type, guests, notes)
+    values (v_customer, 'requested', 'website', v_start, v_end, v_rules.setup_minutes, v_rules.pickup_minutes, v_hold,
+      v_address, v_venue, v_type, nullif(v_guests, '')::int, v_notes)
+    returning id into v_id;
+    -- The conflict target matters: without it an overlap would be skipped silently instead of refused.
+    insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict (booking_id, item_id) do nothing;
+  exception
+    when exclusion_violation then
+      raise exception 'Already booked at that time' using errcode = '23P01';
+    when others then
+      raise exception 'invalid_request' using errcode = '22023';
+  end;
   return jsonb_build_object('hold_until', to_char(v_hold at time zone 'America/Detroit', 'YYYY-MM-DD"T"HH24:MI:SS'));
 end
 $$;

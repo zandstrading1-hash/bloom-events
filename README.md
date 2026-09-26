@@ -40,7 +40,8 @@ On the Rentals page, visitors tap “Book this” on any flower wall, rental or 
 
 - Picks are stored in the visitor’s browser and also carried in the Book link, so they survive if storage is blocked. The list of bookable items lives in `RENTALS` at the top of the picks code in `site.js`; add a matching `data-pick` button in `services.html` for any new item.
 - **The request goes straight into the owner's app** as "On hold" (`request_booking()` in Supabase) and holds its items for 72 hours by default (changeable in the app) until she confirms or declines it. After that it expires and frees them. A package is held as its parts, and its name goes in the request's notes.
-- **Spam limits:** a hidden trap field, at most two waiting requests per email or phone number, and at most ten new website requests an hour overall.
+- **Spam limits:** a hidden trap field, at most two waiting requests per email or phone number, and overall at most ten new website requests an hour, thirty a day and thirty waiting at once (requests are handled one at a time, so the limits hold under bursts). If a script floods it anyway, "Decline all waiting requests" in the app clears them; a CAPTCHA is the next step if that ever happens.
+- **Customers from requests:** a request is linked to an existing customer only when both name and email match, and it never changes that customer's details (a different phone number is noted on the request). Otherwise it adds a new customer.
 - **If the request can't be sent online** (for example Supabase is down), the visitor can send it by text or email instead, with everything filled in.
 - **Web3Forms (optional):** if an access key is added to the form in `contact.html`, a copy of each request is also emailed through Web3Forms.
 
@@ -63,7 +64,7 @@ Open https://zandstrading1-hash.github.io/bloom-events/owner/ and sign in with a
 
 - **Calendar:** month, week and list views in Detroit time, whatever the phone's timezone. In month view, tap a day to see its bookings underneath; in week view, tap a time to start a booking there.
 - **Bookings:** add or edit a booking with the customer (pick an existing one or type a new one), date, start and end time, setup and pickup time, items, address, venue, event type, guests, price, deposit paid, status and notes. While you fill it in, items already held around that time are marked and can't be checked. A booking can be confirmed (if on hold), cancelled, restored or deleted, and its address opens in Maps.
-- **Requests:** website requests land in the Requests list, with a count on the Bookings tab. Each shows when it was sent and how long it holds its items; Confirm or Decline it, and use Text or Email to reply (a greeting is filled in).
+- **Requests:** website requests land in the Requests list, with a count on the Bookings tab. Each shows when it was sent and how long it holds its items; Confirm or Decline it (only if it's still waiting), and use Text or Email to reply (a greeting is filled in). Editing a request takes it over: it no longer expires.
 - **Lists:** upcoming, past and cancelled bookings, searchable by name, phone, address, venue or notes.
 - **Customers:** everyone with a booking or added by hand, with call, text and email buttons, notes and their booking history.
 - **More:** install instructions, default setup and pickup time, how long website requests hold their items, change password, sign out.
