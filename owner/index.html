@@ -13,10 +13,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bloom">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=1">
+<link rel="stylesheet" href="app.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" integrity="sha384-WDvnzcla8X1CQM97EnYyl4OoTCvmMFp5lBiVNO3IjVdvLMOUjwt+iuYb/Mru5A9v" crossorigin="anonymous" defer></script>
-<script src="../site.js?v=20260925-calendar" defer></script>
-<script src="app.js?v=1" defer></script>
+<script src="../site.js?v=20260926-times" defer></script>
+<script src="app.js?v=2" defer></script>
 </head>
 <body>
 
@@ -63,6 +63,7 @@
 
     <section class="screen" id="screen-bookings" aria-labelledby="screen-title" hidden>
       <div class="segmented" role="group" aria-label="Which bookings">
+        <button type="button" data-list="requests" aria-pressed="false">Requests <span class="count" id="requests-count" hidden></span></button>
         <button type="button" data-list="upcoming" aria-pressed="true">Upcoming</button>
         <button type="button" data-list="past" aria-pressed="false">Past</button>
         <button type="button" data-list="cancelled" aria-pressed="false">Cancelled</button>
@@ -95,6 +96,8 @@
           <label class="field">Setup (minutes)<input type="number" id="setting-setup" min="0" max="1440" step="15" inputmode="numeric" required></label>
           <label class="field">Pickup (minutes)<input type="number" id="setting-pickup" min="0" max="1440" step="15" inputmode="numeric" required></label>
         </div>
+        <label class="field">Hold website requests for (hours)<input type="number" id="setting-hold" min="1" max="720" step="1" inputmode="numeric" required></label>
+        <p>A request from the website holds its items this long unless you confirm or decline it first.</p>
         <button class="btn" type="submit">Save</button>
       </form>
       <div class="card stack">
@@ -109,7 +112,7 @@
 
   <nav class="tabbar" aria-label="Sections">
     <button type="button" data-tab="calendar" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>Calendar</button>
-    <button type="button" data-tab="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Bookings</button>
+    <button type="button" data-tab="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Bookings<span class="tab-badge" id="tab-requests" hidden></span></button>
     <button type="button" data-tab="customers"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c2 .8 3.1 2.5 3.5 5.2"/></svg>Customers</button>
     <button type="button" data-tab="more"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>More</button>
   </nav>

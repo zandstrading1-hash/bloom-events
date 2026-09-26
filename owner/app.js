@@ -36,6 +36,7 @@
   const whenText = row => row.start_local.slice(0, 10) === row.end_local.slice(0, 10)
     ? `${dayText(row.start_local)} · ${timeText(row.start_local)} – ${timeText(row.end_local)}`
     : `${dayText(row.start_local)}, ${timeText(row.start_local)} – ${dayText(row.end_local)}, ${timeText(row.end_local)}`;
+  const instantText = t => new Date(t).toLocaleString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   const STATUS = { confirmed: 'Confirmed', requested: 'On hold', cancelled: 'Cancelled', declined: 'Declined', expired: 'Hold expired' };
   const money = n => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -129,7 +130,7 @@
     say($('signin-status'), message);
   };
 
-  let settings = { setup_minutes: 120, pickup_minutes: 120 };
+  let settings = { setup_minutes: 120, pickup_minutes: 120, hold_hours: 72 };
   const start = async () => {
     try {
       const allowed = await rpc('am_i_admin', {});
@@ -145,12 +146,14 @@
     }
     showOnly('shell');
     $('account-email').textContent = session.email;
-    db('/rest/v1/settings?select=setup_minutes,pickup_minutes').then(rows => {
+    db('/rest/v1/settings?select=setup_minutes,pickup_minutes,hold_hours').then(rows => {
       if (rows && rows[0]) settings = rows[0];
       $('setting-setup').value = settings.setup_minutes;
       $('setting-pickup').value = settings.pickup_minutes;
+      $('setting-hold').value = settings.hold_hours;
     }).catch(() => {});
     go(currentTab);
+    countRequests();
   };
 
   $('password-form').addEventListener('submit', async e => {
@@ -206,10 +209,10 @@
   });
 
   const fact = (label, value) => el('div', {}, el('dt', { text: label }), el('dd', {}, value));
-  const contactLinks = (phone, email) => el('div', { class: 'contact' },
+  const contactLinks = (phone, email, message = '') => el('div', { class: 'contact' },
     phone && el('a', { class: 'btn small', href: `tel:${phone.replace(/[^\d+]/g, '')}`, text: 'Call' }),
-    phone && el('a', { class: 'btn small', href: `sms:${phone.replace(/[^\d+]/g, '')}`, text: 'Text' }),
-    email && el('a', { class: 'btn small', href: `mailto:${email}`, text: 'Email' }));
+    phone && el('a', { class: 'btn small', href: `sms:${phone.replace(/[^\d+]/g, '')}${message ? `?&body=${encodeURIComponent(message)}` : ''}`, text: 'Text' }),
+    email && el('a', { class: 'btn small', href: `mailto:${email}${message ? `?subject=${encodeURIComponent('Your Bloom Events booking request')}&body=${encodeURIComponent(message)}` : ''}`, text: 'Email' }));
   const badge = status => status === 'confirmed' ? null : el('span', { class: `badge ${status}`, text: STATUS[status] || status });
 
   /* Tabs */
@@ -226,7 +229,13 @@
     if (tab === 'more') paintInstall();
   };
   document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go(b.dataset.tab)));
+  const countRequests = () => db('/rest/v1/owner_bookings?select=id&status=eq.requested&limit=100').then(rows => {
+    const n = rows.length;
+    [$('tab-requests'), $('requests-count')].forEach(badge => { badge.hidden = !n; badge.textContent = n; });
+    $('tab-requests').setAttribute('aria-label', `${n} request${n === 1 ? '' : 's'} waiting`);
+  }).catch(() => {});
   const refresh = () => {
+    countRequests();
     if (calendar) calendar.refetchEvents();
     if (currentTab === 'bookings') loadBookings(true);
     if (currentTab === 'customers') loadCustomers();
@@ -328,21 +337,25 @@
       row.price == null && row.deposit_paid && fact('Deposit', 'Paid'),
       row.notes && fact('Notes', row.notes),
       fact('Status', STATUS[row.status] || row.status),
+      row.status === 'requested' && fact('Request', `${row.source === 'website' ? 'Sent from the website' : 'Added by you'} on ${instantText(row.created_at)}.${row.hold_until ? ` Holding its items until ${instantText(row.hold_until)} unless you confirm or decline it.` : ''}`),
       row.customer_phone && fact('Phone', row.customer_phone),
       row.customer_email && fact('Email', row.customer_email));
     const actions = el('div', { class: 'actions' },
       el('button', { type: 'button', class: 'btn primary', text: 'Edit', onclick: () => openForm({ row }) }),
-      row.status === 'requested' && el('button', { type: 'button', class: 'btn', text: 'Confirm', onclick: () => changeStatus(row, 'confirmed', 'Booking confirmed') }),
-      active && el('button', { type: 'button', class: 'btn', text: 'Cancel booking', onclick: () => { if (confirm(`Cancel ${row.customer_name || 'this booking'} on ${dayText(row.start_local)}? Its items become free again.`)) changeStatus(row, 'cancelled', 'Booking cancelled'); } }),
+      row.status === 'requested' && el('button', { type: 'button', class: 'btn primary', text: 'Confirm', onclick: () => changeStatus(row, 'confirmed', 'Booking confirmed. Let them know with Text or Email.') }),
+      row.status === 'requested' && row.source === 'website' && el('button', { type: 'button', class: 'btn', text: 'Decline', onclick: () => { if (confirm(`Decline this request from ${row.customer_name || 'this customer'}? Its items become free again.`)) changeStatus(row, 'declined', 'Request declined'); } }),
+      active && !(row.status === 'requested' && row.source === 'website') && el('button', { type: 'button', class: 'btn', text: 'Cancel booking', onclick: () => { if (confirm(`Cancel ${row.customer_name || 'this booking'} on ${dayText(row.start_local)}? Its items become free again.`)) changeStatus(row, 'cancelled', 'Booking cancelled'); } }),
       !active && el('button', { type: 'button', class: 'btn', text: 'Restore booking', onclick: () => changeStatus(row, 'confirmed', 'Booking restored') }),
       row.customer_id && el('button', { type: 'button', class: 'btn', text: 'Customer details', onclick: () => { close(bookingDialog); openCustomer(row.customer_id); } }),
       el('button', { type: 'button', class: 'btn danger', text: 'Delete', onclick: () => deleteBooking(row) }));
-    $('booking-body').replaceChildren(facts, contactLinks(row.customer_phone, row.customer_email), actions);
+    const first = (row.customer_name || '').trim().split(' ')[0];
+    const message = row.source === 'website' ? `Hi${first ? ` ${first}` : ''}, this is Bloom Events about your booking request for ${dayText(row.start_local)}. ` : '';
+    $('booking-body').replaceChildren(facts, contactLinks(row.customer_phone, row.customer_email, message), actions);
     open(bookingDialog);
   };
   const changeStatus = async (row, status, done) => {
     try {
-      await db(`/rest/v1/bookings?id=eq.${row.id}`, { method: 'PATCH', body: { status }, prefer: 'return=minimal' });
+      await db(`/rest/v1/bookings?id=eq.${row.id}`, { method: 'PATCH', body: status === 'confirmed' ? { status, hold_until: null } : { status }, prefer: 'return=minimal' });
       close(bookingDialog);
       toast(done);
       refresh();
@@ -503,13 +516,15 @@
       el('span', { class: 'line1' }, row.customer_name || 'No name', badge(row.status)),
       el('span', { class: 'sub', text: whenText(row) }),
       el('span', { class: 'sub', text: itemList(row.items) }),
-      row.address && el('span', { class: 'sub', text: row.address }))));
+      row.address && el('span', { class: 'sub', text: row.address }),
+      row.status === 'requested' && row.source === 'website' && el('span', { class: 'sub request', text: `Website request${row.hold_until ? ` · holding until ${instantText(row.hold_until)}` : ''}` }))));
   const loadBookings = async reset => {
     const id = ++listId;
     if (reset) listOffset = 0;
     const now = nowWall();
     const query = search(['customer_name', 'customer_phone', 'address', 'venue', 'notes'], $('booking-search').value);
     const where = {
+      requests: 'status=eq.requested&order=created_at.desc,id.desc',
       upcoming: `status=in.(requested,confirmed)&end_local=gte.${now}&order=start_local.asc,id.asc`,
       past: `status=in.(requested,confirmed)&end_local=lt.${now}&order=start_local.desc,id.desc`,
       cancelled: 'status=in.(cancelled,declined,expired)&order=start_local.desc,id.desc'
@@ -524,7 +539,7 @@
       const empty = reset && !page.length;
       $('booking-empty').hidden = !empty;
       $('booking-empty').textContent = query ? 'No bookings match your search.'
-        : { upcoming: 'No upcoming bookings. Tap “New booking” to add one.', past: 'No past bookings yet.', cancelled: 'No cancelled bookings.' }[listKind];
+        : { requests: 'No requests waiting. Requests from the website show up here.', upcoming: 'No upcoming bookings. Tap “New booking” to add one.', past: 'No past bookings yet.', cancelled: 'No cancelled bookings.' }[listKind];
     } catch (e) {
       if (e.status !== 401) toast(e.status ? `Bookings couldn’t load (${e.message}).` : 'You’re offline. Bookings will load when you’re back online.');
     }
@@ -643,11 +658,11 @@
   $('settings-form').addEventListener('submit', async e => {
     e.preventDefault();
     if (!e.target.reportValidity()) return;
-    const body = { setup_minutes: Number($('setting-setup').value), pickup_minutes: Number($('setting-pickup').value) };
+    const body = { setup_minutes: Number($('setting-setup').value), pickup_minutes: Number($('setting-pickup').value), hold_hours: Number($('setting-hold').value) };
     try {
       await db('/rest/v1/settings?id=eq.true', { method: 'PATCH', body, prefer: 'return=minimal' });
       settings = body;
-      toast('Saved. New bookings will use these times.');
+      toast('Saved. New bookings and requests will use these times.');
     } catch (err) {
       if (err.status !== 401) toast(err.status ? `Couldn’t save (${err.message}).` : 'You’re offline, so this can’t be saved yet.');
     }

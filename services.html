@@ -30,8 +30,8 @@
 <link rel="apple-touch-icon" href="bloom-events-apple-touch-icon.png">
 
 <link rel="stylesheet" href="styles.css?v=20260908-natural2">
-<link rel="stylesheet" href="refinements.css?v=20260925-calendar">
-<script src="site.js?v=20260925-calendar" defer></script>
+<link rel="stylesheet" href="refinements.css?v=20260926-times">
+<script src="site.js?v=20260926-times" defer></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -97,7 +97,7 @@
     <div class="page-hero-inner">
       <div class="section-eyebrow">Rentals</div>
       <h1>Pick your pieces</h1>
-      <p class="page-hero-subtitle">Check your date, tap “Book this” on anything you like, then send one request. We’ll confirm and send you a quote.</p>
+      <p class="page-hero-subtitle">Check your date and time, tap “Book this” on anything you like, then send one request. We’ll hold your picks while we confirm and send you a quote.</p>
     </div>
   </section>
 
@@ -105,7 +105,11 @@
     <div class="container date-check-grid">
       <div class="date-check-intro">
         <h2 class="display section-title" id="date-check-title">Check your date</h2>
-        <p class="rentals-note">Choose your event date to see what’s free. Anything already booked that day is marked below.</p>
+        <p class="rentals-note">Choose your event date, then your start and end time, to see what’s free. Anything already booked is marked below.</p>
+        <div class="time-pick" id="time-pick" hidden>
+          <label class="time-field">Event starts<select id="pick-start"></select></label>
+          <label class="time-field">Ends<select id="pick-end"></select></label>
+        </div>
         <p class="date-status" id="date-status" role="status"></p>
         <button type="button" class="date-clear" id="date-clear" hidden>Clear date</button>
       </div>
@@ -119,7 +123,7 @@
           <thead><tr><th scope="col" abbr="Sunday">Su</th><th scope="col" abbr="Monday">Mo</th><th scope="col" abbr="Tuesday">Tu</th><th scope="col" abbr="Wednesday">We</th><th scope="col" abbr="Thursday">Th</th><th scope="col" abbr="Friday">Fr</th><th scope="col" abbr="Saturday">Sa</th></tr></thead>
           <tbody></tbody>
         </table>
-        <p class="cal-key"><span class="cal-key-swatch" aria-hidden="true"></span>All flower walls booked</p>
+        <p class="cal-key"><span class="cal-key-dot" aria-hidden="true"></span>Some bookings <span class="cal-key-swatch" aria-hidden="true"></span>Every wall has a booking</p>
       </div>
     </div>
   </section>

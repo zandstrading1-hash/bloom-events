@@ -31,7 +31,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
       { id: 11, customer_id: 2, status: 'confirmed', start_local: `${PAST}T10:00:00`, end_local: `${PAST}T15:00:00`, setup_minutes: 60, pickup_minutes: 60, address: null, venue: null, event_type: 'Birthday', guests: null, price: null, deposit_paid: false, notes: null, items: ['sweets-cart'] },
       { id: 12, customer_id: 2, status: 'cancelled', start_local: `${LATER}T10:00:00`, end_local: `${LATER}T12:00:00`, setup_minutes: 60, pickup_minutes: 60, address: null, venue: null, event_type: null, guests: null, price: null, deposit_paid: false, notes: null, items: ['pedestals'] }
     ],
-    settings: { setup_minutes: 120, pickup_minutes: 120 },
+    settings: { setup_minutes: 120, pickup_minutes: 120, hold_hours: 72 },
     raceItems: [],
     log: [],
     next: 100
@@ -40,7 +40,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   const isActive = b => b.status === 'requested' || b.status === 'confirmed';
   const held = b => [w(b.start_local) - b.setup_minutes * 60000, w(b.end_local) + b.pickup_minutes * 60000];
   const overlap = (a, b) => a[0] < b[1] && b[0] < a[1];
-  const bookingView = b => { const c = s.customers.find(x => x.id === b.customer_id) || {}; return { ...b, customer_name: c.name ?? null, customer_phone: c.phone ?? null, customer_email: c.email ?? null, items: [...b.items].sort() }; };
+  const bookingView = b => { const c = s.customers.find(x => x.id === b.customer_id) || {}; return { source: 'owner', created_at: '2026-09-01T12:00:00Z', hold_until: null, ...b, customer_name: c.name ?? null, customer_phone: c.phone ?? null, customer_email: c.email ?? null, items: [...b.items].sort() }; };
   const customerView = c => { const mine = s.bookings.filter(b => b.customer_id === c.id && isActive(b)); return { ...c, booking_count: mine.length, latest_event_local: mine.map(b => b.start_local).sort().pop() || null }; };
   const proposed = ({ date, start, end, setup, pickup }) => {
     const startLocal = `${date}T${start}:00`;
@@ -254,7 +254,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.waitForFunction(() => document.querySelectorAll('#booking-list li').length === 3);
   await p.click('#booking-list li:has-text("On hold") button');
   await p.click('#booking-body >> text=Confirm');
-  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Booking confirmed');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Booking confirmed'));
   assert(s.bookings.find(x => x.customer_id === 1 && x.items.includes('pedestals')).status === 'confirmed', 'a hold can be confirmed');
   await p.click('#booking-list li:has-text("Ivory flower wall") button');
   await p.click('#booking-body >> text=Edit');
@@ -387,6 +387,46 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.fill('#f-name', '   ');
   await p.click('#booking-form [type="submit"]');
   assert((await p.textContent('#form-status')).includes('Enter the customer’s name'), 'a name of only spaces is caught');
+  await ctx.close();
+
+  /* Requests from the website: badge, Requests list, confirm and decline, hold setting */
+  const request = (id, start, item, extra = {}) => ({ id, customer_id: 2, status: 'requested', source: 'website', created_at: new Date(Date.now() - 2 * 3600000).toISOString(), hold_until: new Date(Date.now() + 70 * 3600000).toISOString(), start_local: `${LATER}T${start}:00`, end_local: `${LATER}T${start.replace(/^\d\d/, h => String(Number(h) + 2).padStart(2, '0'))}:00`, setup_minutes: 120, pickup_minutes: 120, address: '9 Elm St, Warren', venue: null, event_type: 'Birthday', guests: 30, price: null, deposit_paid: false, notes: 'Package: The Sweet Setup package\nPink please', items: [item], ...extra });
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  s = await fakeSupabase(ctx, { extra: [request(300, '12:00', 'garden-wall'), request(301, '16:00', 'red-rose-wall')] });
+  await ctx.addInitScript(t => localStorage.setItem('bloom-owner-session', JSON.stringify({ access_token: t, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, email: 'owner@example.com' })), TOKEN);
+  p = await ctx.newPage();
+  p.on('dialog', d => d.accept());
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.waitForFunction(() => !document.getElementById('tab-requests').hidden);
+  assert(await p.textContent('#tab-requests') === '2' && (await p.getAttribute('#tab-requests', 'aria-label')) === '2 requests waiting', 'Bookings tab shows 2 requests waiting');
+  await p.click('[data-tab="bookings"]');
+  assert(await p.textContent('#requests-count') === '2', 'the Requests button shows the count too');
+  await p.click('[data-list="requests"]');
+  await p.waitForFunction(() => document.querySelectorAll('#booking-list li').length === 2);
+  assert((await p.textContent('#booking-list')).includes('Website request · holding until'), 'requests show how long they’re held');
+  await p.click('#booking-list li:has-text("Garden flower wall") button');
+  const req = await p.textContent('#booking-body');
+  assert(req.includes('Sent from the website on') && req.includes('Holding its items until') && req.includes('Package: The Sweet Setup package'), 'request details show where it came from, the hold and the notes');
+  assert(decodeURIComponent(await p.getAttribute('#booking-body a[href^="sms:"]', 'href')).includes('Hi Maria, this is Bloom Events about your booking request for'), 'Text button starts a reply to the customer');
+  assert(await p.isVisible('#booking-body button:has-text("Decline")') && !(await p.$('#booking-body button:has-text("Cancel booking")')), 'a website request can be confirmed or declined');
+  await p.click('#booking-body button:has-text("Confirm")');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Booking confirmed'));
+  const confirmed = s.log.filter(l => l.method === 'PATCH' && l.path === '/rest/v1/bookings').pop();
+  assert(confirmed.body.status === 'confirmed' && confirmed.body.hold_until === null && confirmed.search.includes('id=eq.300'), 'confirming saves it as confirmed and ends the hold');
+  await p.waitForFunction(() => document.getElementById('tab-requests').textContent === '1');
+  assert(true, 'the count drops to 1');
+  await p.click('#booking-list li:has-text("Red rose wall") button');
+  await p.click('#booking-body button:has-text("Decline")');
+  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Request declined');
+  assert(s.log.filter(l => l.method === 'PATCH' && l.path === '/rest/v1/bookings').pop().body.status === 'declined', 'declining saves it as declined');
+  await p.waitForFunction(() => document.getElementById('tab-requests').hidden);
+  assert((await p.textContent('#booking-empty')).startsWith('No requests waiting'), 'no requests left, and the badge is gone');
+  await p.click('[data-tab="more"]');
+  assert(await p.inputValue('#setting-hold') === '72', 'hold time setting loaded');
+  await p.fill('#setting-hold', '48');
+  await p.click('#settings-form button');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Saved'));
+  assert(s.settings.hold_hours === 48, 'hold time saved');
   await ctx.close();
 
   /* Old address */

@@ -36,22 +36,25 @@ The logo is the name itself: "Bloom" with a line-drawn rose standing in for the 
 
 ## Booking
 
-On the Rentals page, visitors tap “Book this” on any flower wall, rental or package. Each item can be picked once (there is one of each wall), and the picks follow them to the Book page (`contact.html`), where they send one request with their date.
+On the Rentals page, visitors tap “Book this” on any flower wall, rental or package. Each item can be picked once (there is one of each wall), and the picks follow them to the Book page (`contact.html`), where they send one request with their date and event times.
 
 - Picks are stored in the visitor’s browser and also carried in the Book link, so they survive if storage is blocked. The list of bookable items lives in `RENTALS` at the top of the picks code in `site.js`; add a matching `data-pick` button in `services.html` for any new item.
-- Until a Web3Forms access key is added to the form in `contact.html`, “Send by text” opens the visitor’s messages app (or email) with the request filled in. With a key, the same button sends the request online.
-- The owner still confirms every request by reply; a request never reserves a date by itself.
+- **The request goes straight into the owner's app** as "On hold" (`request_booking()` in Supabase) and holds its items for 72 hours by default (changeable in the app) until she confirms or declines it. After that it expires and frees them. A package is held as its parts, and its name goes in the request's notes.
+- **Spam limits:** a hidden trap field, at most two waiting requests per email or phone number, and at most ten new website requests an hour overall.
+- **If the request can't be sent online** (for example Supabase is down), the visitor can send it by text or email instead, with everything filled in.
+- **Web3Forms (optional):** if an access key is added to the form in `contact.html`, a copy of each request is also emailed through Web3Forms.
 
 ## Availability calendar
 
-Bookings live in a free Supabase project (`dwazctmqkrnajqmswtiy`): customers, bookings with start and end times, and the items each booking holds. The site's address and publishable key for it are in `DB` in `site.js`. That key is meant to be public: with it, visitors can only call `booked_items()`, which returns item ids and dates, never names, addresses or times.
+Bookings live in a free Supabase project (`dwazctmqkrnajqmswtiy`): customers, bookings with start and end times, and the items each booking holds. The site's address and publishable key for it are in `DB` in `site.js`. That key is meant to be public. With it, visitors can only call `availability()` (when each item is held, never who by), `booking_rules()` (the setup and pickup time), `booked_items()` (held items by day) and `request_booking()`.
 
-- **Rentals page:** "Check your date" shows a month calendar. Choosing a date marks anything booked that day and stops it being added. A package is blocked when one of its parts is booked (`PARTS` in `site.js`). Days with every flower wall booked are marked. The date carries to the Book page.
-- **Book page:** the date is checked against the picks. A booked pick is flagged and the request can't be sent until it's removed or the date changes.
-- **If Supabase can't be reached** (including if the free project pauses), nothing is blocked and requests go out as before.
+- **Rentals page:** "Check your date" shows a month calendar; days with some bookings get a dot, and days with every flower wall booked are struck through. After choosing a date, items with bookings that day show when they're taken ("Taken 12 PM–11 PM"). Choosing the event's start and end time then blocks anything held around that time, including our setup and pickup time. A package is blocked when one of its parts is (`PARTS` in `site.js`). The date and times carry to the Book page.
+- **Book page:** the date and times are checked against the picks. A taken pick is flagged and the request can't be sent until it's removed or the time changes.
+- **If Supabase can't be reached** (including if the free project pauses), nothing is blocked and requests can go out by text or email.
 - **An item is held from setup to pickup.** Each booking has a start and end time (Detroit time; an end before the start means the next day, and the same time means 24 hours) plus setup and pickup minutes, 2 hours each by default and changeable in the app. The database refuses any booking that would hold the same item at an overlapping time, including "On hold" bookings. Cancelled bookings free their items.
 - **Adding a new rental:** add it to `RENTALS` in `site.js`, add its `data-pick` button in `services.html`, and add its id to the `item_id` check on `booking_items` in `supabase/schema.sql`. Change that check by hand in the SQL editor too, because `create table if not exists` won't alter an existing table. A new package also needs its parts in `PARTS`.
 - **Changing the database:** `supabase/schema.sql` is safe to run more than once. The browser tests fake Supabase, so SQL changes need their own check; the current rules were tested on a local Postgres 17 before going live.
+- **Holds that run out:** a database job (pg_cron) marks expired website requests every 15 minutes, and every save expires stale holds first, so a hold that ran out never blocks anything.
 - **Keeping it awake:** Supabase pauses free projects after about a week with little activity. The `Keep calendar awake` GitHub Action looks up booked dates four times a day. If a lookup fails, the run fails and GitHub emails the repository owner; resume the project from the Supabase dashboard. Because this repository is public, GitHub would turn the schedule off after 60 days without commits, so after 45 quiet days the Action commits a dated `.github/keepalive` file.
 
 ## Bloom Bookings (the owner's app)
@@ -60,9 +63,10 @@ Open https://zandstrading1-hash.github.io/bloom-events/owner/ and sign in with a
 
 - **Calendar:** month, week and list views in Detroit time, whatever the phone's timezone. In month view, tap a day to see its bookings underneath; in week view, tap a time to start a booking there.
 - **Bookings:** add or edit a booking with the customer (pick an existing one or type a new one), date, start and end time, setup and pickup time, items, address, venue, event type, guests, price, deposit paid, status and notes. While you fill it in, items already held around that time are marked and can't be checked. A booking can be confirmed (if on hold), cancelled, restored or deleted, and its address opens in Maps.
+- **Requests:** website requests land in the Requests list, with a count on the Bookings tab. Each shows when it was sent and how long it holds its items; Confirm or Decline it, and use Text or Email to reply (a greeting is filled in).
 - **Lists:** upcoming, past and cancelled bookings, searchable by name, phone, address, venue or notes.
 - **Customers:** everyone with a booking or added by hand, with call, text and email buttons, notes and their booking history.
-- **More:** install instructions, default setup and pickup time, change password, sign out.
+- **More:** install instructions, default setup and pickup time, how long website requests hold their items, change password, sign out.
 
 Accounts:
 
@@ -80,7 +84,7 @@ npx playwright install chromium   # skip if a Chromium is available; set CHROMIU
 npm test
 ```
 
-`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers booked dates on the Rentals and Book pages and the fallback when Supabase is down; `owner-flow.js` covers the owner app (sign-in, calendar, booking form and conflicts, lists, customers, settings, password, home-screen install and offline start) on a phone set to Tokyo time; `site-check.js` loads every page, including the owner app signed out, signed in and with the booking form open, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
+`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers the Rentals calendar and time pickers, the Book page check, requests sent into the owner's app (and Supabase's answers to them), and the text or email fallback when Supabase is down; `owner-flow.js` covers the owner app (sign-in, calendar, booking form and conflicts, lists, customers, settings, password, home-screen install and offline start) on a phone set to Tokyo time; `site-check.js` loads every page, including the owner app signed out, signed in and with the booking form open, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
 
 ## Publication status
 

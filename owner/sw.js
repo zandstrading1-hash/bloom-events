@@ -1,6 +1,6 @@
 /* Keeps a copy of the app's screens on the phone so it opens quickly and without signal.
    Bookings always come live from Supabase and are never stored here. */
-const CACHE = 'bloom-bookings-v2';
+const CACHE = 'bloom-bookings-v3';
 const CALENDAR_LIB = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js';
 const SHELL = ['./', 'app.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'apple-touch-icon.png', '../site.js', '../bloom-events-logo.svg'];
 

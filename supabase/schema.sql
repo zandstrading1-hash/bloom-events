@@ -33,6 +33,7 @@ create table if not exists public.settings (
   pickup_minutes int not null default 120 check (pickup_minutes between 0 and 1440)
 );
 insert into public.settings (id) values (true) on conflict do nothing;
+alter table public.settings add column if not exists hold_hours int not null default 72 check (hold_hours between 1 and 720);
 
 create table if not exists public.customers (
   id bigint generated always as identity primary key,
@@ -63,6 +64,8 @@ create table if not exists public.bookings (
   created_at timestamptz not null default now(),
   check (event_end > event_start and event_end <= event_start + interval '7 days')
 );
+-- Website requests hold their items until hold_until unless the owner confirms or declines first.
+alter table public.bookings add column if not exists hold_until timestamptz;
 create index if not exists bookings_event_start on public.bookings (event_start);
 create index if not exists bookings_customer on public.bookings (customer_id);
 
@@ -107,6 +110,20 @@ drop trigger if exists bookings_refresh_items on public.bookings;
 create trigger bookings_refresh_items after update of event_start, event_end, setup_minutes, pickup_minutes, status on public.bookings
   for each row execute function private.booking_changed();
 
+-- Marks website requests whose hold ran out as expired, which frees their items.
+create or replace function private.expire_holds() returns integer
+language sql security definer set search_path = ''
+as $$
+  with expired as (
+    update public.bookings set status = 'expired'
+    where status = 'requested' and hold_until is not null and hold_until <= now()
+    returning 1
+  )
+  select count(*)::int from expired
+$$;
+revoke all on function private.expire_holds() from public;
+grant execute on function private.expire_holds() to authenticated;
+
 alter table public.settings enable row level security;
 alter table public.customers enable row level security;
 alter table public.bookings enable row level security;
@@ -135,7 +152,8 @@ select b.id, b.status, b.source, b.event_start, b.event_end,
   b.event_end at time zone 'America/Detroit' as end_local,
   b.setup_minutes, b.pickup_minutes, b.address, b.venue, b.event_type, b.guests, b.price, b.deposit_paid, b.notes, b.created_at,
   b.customer_id, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
-  array(select i.item_id from public.booking_items i where i.booking_id = b.id order by i.item_id) as items
+  array(select i.item_id from public.booking_items i where i.booking_id = b.id order by i.item_id) as items,
+  b.hold_until
 from public.bookings b
 left join public.customers c on c.id = b.customer_id;
 
@@ -172,6 +190,7 @@ begin
   if not private.is_admin() then
     raise exception 'Not allowed' using errcode = '42501';
   end if;
+  perform private.expire_holds();
   if cardinality(v_items) = 0 then
     raise exception 'Choose at least one item' using errcode = '22023';
   end if;
@@ -237,6 +256,7 @@ as $$
   join public.bookings b on b.id = i.booking_id
   left join public.customers c on c.id = b.customer_id
   where i.active and (p_booking is null or b.id <> p_booking)
+    and (b.status <> 'requested' or b.hold_until is null or b.hold_until > now())
     and i.blocked && tstzrange(
       ((p_date + p_start) at time zone 'America/Detroit') - make_interval(mins => p_setup),
       ((p_date + p_end + case when p_end <= p_start then interval '1 day' else interval '0 days' end) at time zone 'America/Detroit') + make_interval(mins => p_pickup),
@@ -260,6 +280,7 @@ as $$
     ((b.event_end - interval '1 second') at time zone 'America/Detroit')::date::timestamp,
     interval '1 day') d
   where i.active
+    and (b.status <> 'requested' or b.hold_until is null or b.hold_until > now())
     and b.event_end > (from_date::timestamp at time zone 'America/Detroit')
     and b.event_start < ((least(to_date, from_date + 400) + 1)::timestamp at time zone 'America/Detroit')
     and d::date between from_date and least(to_date, from_date + 400)
@@ -267,6 +288,113 @@ as $$
 $$;
 revoke all on function public.booked_items(date, date) from public;
 grant execute on function public.booked_items(date, date) to anon, authenticated;
+
+-- Public availability with times: when each item is held (setup to pickup) as Detroit wall-clock times,
+-- at most about 13 months per call. Names, addresses and notes stay private.
+create or replace function public.availability(from_date date, to_date date)
+returns table (item_id text, busy_from timestamp, busy_until timestamp)
+language sql stable security definer set search_path = ''
+as $$
+  select i.item_id, lower(i.blocked) at time zone 'America/Detroit', upper(i.blocked) at time zone 'America/Detroit'
+  from public.booking_items i
+  join public.bookings b on b.id = i.booking_id
+  where i.active
+    and (b.status <> 'requested' or b.hold_until is null or b.hold_until > now())
+    and i.blocked && tstzrange(from_date::timestamp at time zone 'America/Detroit', (least(to_date, from_date + 400) + 1)::timestamp at time zone 'America/Detroit', '[)')
+  order by 2, 1
+$$;
+revoke all on function public.availability(date, date) from public;
+grant execute on function public.availability(date, date) to anon, authenticated;
+
+-- The setup and pickup time the website adds around a customer's event when checking what's free.
+create or replace function public.booking_rules()
+returns table (setup_minutes int, pickup_minutes int)
+language sql stable security definer set search_path = ''
+as $$ select s.setup_minutes, s.pickup_minutes from public.settings s $$;
+revoke all on function public.booking_rules() from public;
+grant execute on function public.booking_rules() to anon, authenticated;
+
+-- Booking requests from the website, saved as holds ("requested") that keep their items until the owner
+-- confirms or declines, or hold_until passes. Anyone can call this, so it checks everything itself.
+create or replace function public.request_booking(r jsonb) returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_name text := trim(coalesce(r ->> 'name', ''));
+  v_email text := lower(trim(coalesce(r ->> 'email', '')));
+  v_phone text := nullif(trim(coalesce(r ->> 'phone', '')), '');
+  v_digits text := regexp_replace(coalesce(r ->> 'phone', ''), '\D', '', 'g');
+  v_items text[] := array(select distinct jsonb_array_elements_text(coalesce(r -> 'items', '[]'::jsonb)));
+  v_today date := (now() at time zone 'America/Detroit')::date;
+  v_rules public.settings;
+  v_day date;
+  v_start_time time;
+  v_end_time time;
+  v_start timestamptz;
+  v_end timestamptz;
+  v_hold timestamptz;
+  v_customer bigint;
+  v_id bigint;
+  v_taken text[];
+begin
+  -- The trap field is hidden from people, so only bots fill it in: report success and save nothing.
+  if coalesce(r ->> 'trap', '') <> '' then
+    return jsonb_build_object('hold_until', null);
+  end if;
+  begin
+    v_day := (r ->> 'date')::date;
+    v_start_time := (r ->> 'start')::time;
+    v_end_time := (r ->> 'end')::time;
+  exception when others then
+    raise exception 'invalid_request' using errcode = '22023';
+  end;
+  if v_name = '' or char_length(v_name) > 200 or char_length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+     or v_day is null or v_start_time is null or v_end_time is null or v_day < v_today or v_day > v_today + 550 then
+    raise exception 'invalid_request' using errcode = '22023';
+  end if;
+  perform private.expire_holds();
+
+  -- Spam limits: two waiting requests per email or phone, and at most ten new requests an hour overall.
+  if (select count(*) from public.bookings b join public.customers c on c.id = b.customer_id
+      where b.source = 'website' and b.status = 'requested'
+        and (c.email = v_email or (char_length(v_digits) >= 7 and regexp_replace(coalesce(c.phone, ''), '\D', '', 'g') = v_digits))) >= 2 then
+    raise exception 'pending_limit' using errcode = 'P0001';
+  end if;
+  if (select count(*) from public.bookings b where b.source = 'website' and b.created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'busy' using errcode = 'P0001';
+  end if;
+
+  select * into v_rules from public.settings;
+  v_start := (v_day + v_start_time) at time zone 'America/Detroit';
+  v_end := (v_day + v_end_time + case when v_end_time <= v_start_time then interval '1 day' else interval '0 days' end) at time zone 'America/Detroit';
+  select array_agg(distinct i.item_id) into v_taken
+  from public.booking_items i
+  where i.active and i.item_id = any (v_items)
+    and i.blocked && tstzrange(v_start - make_interval(mins => v_rules.setup_minutes), v_end + make_interval(mins => v_rules.pickup_minutes), '[)');
+  if v_taken is not null then
+    raise exception 'Already booked at that time' using errcode = '23P01', detail = array_to_string(v_taken, ',');
+  end if;
+
+  select c.id into v_customer from public.customers c where c.email = v_email order by c.id limit 1;
+  if v_customer is null then
+    insert into public.customers (name, phone, email) values (v_name, v_phone, v_email) returning id into v_customer;
+  else
+    update public.customers set phone = coalesce(phone, v_phone) where id = v_customer;
+  end if;
+  v_hold := now() + make_interval(hours => v_rules.hold_hours);
+  insert into public.bookings (customer_id, status, source, event_start, event_end, setup_minutes, pickup_minutes, hold_until, address, venue, event_type, guests, notes)
+  values (v_customer, 'requested', 'website', v_start, v_end, v_rules.setup_minutes, v_rules.pickup_minutes, v_hold,
+    nullif(trim(r ->> 'address'), ''), nullif(trim(r ->> 'venue'), ''), nullif(trim(r ->> 'event_type'), ''),
+    case when coalesce(r ->> 'guests', '') ~ '^[1-9][0-9]{0,4}$' then (r ->> 'guests')::int end,
+    nullif(trim(r ->> 'notes'), ''))
+  returning id into v_id;
+  -- The conflict target matters: without it an overlap would be skipped silently instead of refused.
+  insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict (booking_id, item_id) do nothing;
+  return jsonb_build_object('hold_until', to_char(v_hold at time zone 'America/Detroit', 'YYYY-MM-DD"T"HH24:MI:SS'));
+end
+$$;
+revoke all on function public.request_booking(jsonb) from public;
+grant execute on function public.request_booking(jsonb) to anon, authenticated;
 
 -- Lets the owner app tell a signed-in person whether their email can manage bookings.
 create or replace function public.am_i_admin() returns boolean
@@ -295,6 +423,19 @@ begin
       insert into public.booking_items (booking_id, item_id) select v_booking, unnest(r.items);
     end loop;
     drop table public.reservations;
+  end if;
+end
+$$;
+
+-- Every 15 minutes, expire website holds that ran out. Skipped where pg_cron isn't available (local tests);
+-- the functions above also expire stale holds before they save anything.
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    create extension if not exists pg_cron with schema pg_catalog;
+    grant usage on schema cron to postgres;
+    grant all privileges on all tables in schema cron to postgres;
+    perform cron.schedule('bloom-expire-holds', '*/15 * * * *', 'select private.expire_holds()');
   end if;
 end
 $$;
