@@ -1,6 +1,6 @@
 # Next steps
 
-Where the Bloom Events site stands and what is still open, as of September 25, 2026.
+Where the Bloom Events site stands and what is still open, as of September 27, 2026.
 
 ## Waiting on the owner
 
@@ -20,8 +20,9 @@ Built: the Rentals page calendar, booked-item blocking on the Rentals and Book p
 - **Supabase project:** `dwazctmqkrnajqmswtiy` ("Bloom Events"), in its own Supabase account (zuhairmikhail12@gmail.com) so it doesn't count against the zandstrading1-hash account's two free projects. The Supabase connector in Claude is connected to the other account, so database changes go through the Supabase dashboard SQL editor.
 - **Her login:** her email address is still needed. Create her account in Supabase (see the README), or invite her email to the Supabase organization so "Email me a sign-in link" works for her too.
 - **Built (Phase 2):** customers choose a date and event times and see what's free then; requests are saved straight into the app as "On hold", hold their items for 72 hours (changeable) unless she confirms or declines, and then expire; a Requests list with Confirm and Decline and a count on the Bookings tab; spam limits (a hidden trap field, two waiting requests per email or phone, ten website requests an hour, thirty a day, thirty waiting at once) and "Decline all". If spam ever gets through anyway, add a CAPTCHA (Cloudflare Turnstile is free) checked in `request_booking`.
-- **Next (Phase 3):** new-request notifications on her phone (the most useful next step: today she only sees requests when she opens the app), her bookings in her phone's own calendar through a private link, and deposit and payment tracking.
-- **Privacy page:** the draft should mention that booking requests and bookings (customer name, phone, email, event address, date and times, items, notes) are stored with Supabase.
+- **Built (Phase 3):** an alert on her phone for every new website request (Web Push from the `bloom-bookings` edge function, retried for a day if it can't go out), a count of waiting requests on the app icon, and her confirmed bookings and holds in her phone's Calendar app through a private link she can replace. Each phone turns alerts on once: open the app from the Home Screen, More, "Turn on alerts", allow, then "Send a test alert".
+- **Next:** deposit and payment tracking (taking payments online needs a Stripe account in the business's name), and a reminder alert before a request's hold runs out if she'd find it useful.
+- **Privacy page:** the draft should mention that booking requests and bookings (customer name, phone, email, event address, date and times, items, notes) are stored with Supabase, and that the owner's alerts and calendar show them on her phone (alerts are encrypted end to end; a subscribed calendar is kept by her phone's calendar service).
 - **Own domain before launch.** The site shares its address (zandstrading1-hash.github.io) with other sites on the same GitHub account. The owner app's sign-in is stored for that whole address, so a script on any of those sites could read it. Moving Bloom to its own domain (for example bloomevents.com) fixes this; then update Site URL and Redirect URLs in Supabase.
 
 ## Logo

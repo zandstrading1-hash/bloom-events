@@ -7,11 +7,14 @@
     "calendar": "node calendar-flow.js",
     "owner": "node owner-flow.js",
     "site": "node site-check.js",
-    "test": "node booking-flow.js && node calendar-flow.js && node owner-flow.js && node site-check.js"
+    "alerts": "node alerts-function.mjs",
+    "test": "node alerts-function.mjs && node booking-flow.js && node calendar-flow.js && node owner-flow.js && node site-check.js"
   },
   "devDependencies": {
     "axe-core": "4.10.3",
     "fullcalendar": "6.1.21",
+    "http_ece": "1.2.1",
+    "ical.js": "2.2.1",
     "playwright": "1.56.1"
   }
 }

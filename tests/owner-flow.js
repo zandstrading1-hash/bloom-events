@@ -1,6 +1,8 @@
-/* Owner app (owner/): sign-in, calendar, booking form with conflicts, lists, customers, settings, password, home-screen install. */
+/* Owner app (owner/): sign-in, calendar, booking form with conflicts, lists, customers, settings, password, phone alerts,
+   the calendar link and home-screen install. */
 const { chromium } = require('playwright');
 const fs = require('fs');
+const crypto = require('crypto');
 // Run with the site served locally (see the README). Supabase is faked in memory, so no real bookings change.
 // BASE_URL overrides the address; CHROMIUM_PATH points Playwright at a local Chromium.
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:8765';
@@ -18,6 +20,8 @@ const LATER = addDays(TODAY, 10);
 const w = s => Date.parse(`${s}Z`);
 const jwt = email => ['{"alg":"HS256"}', JSON.stringify({ email }), 'sig'].map(p => Buffer.from(p).toString('base64url')).join('.');
 const TOKEN = jwt('owner@example.com');
+// The public key phones subscribe with: a real P-256 point, as the edge function hands out.
+const ALERT_KEY = crypto.createECDH('prime256v1').generateKeys().toString('base64url');
 
 // A small in-memory stand-in for the Supabase API, with the same rules as supabase/schema.sql.
 const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } = {}) => {
@@ -33,6 +37,9 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
     ],
     settings: { setup_minutes: 120, pickup_minutes: 120, hold_hours: 72 },
     raceItems: [],
+    phones: new Map(),
+    tests: [],
+    calendarToken: null,
     log: [],
     next: 100
   };
@@ -98,9 +105,14 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
     }
     if (path === '/auth/v1/otp') return json(route, 200, {});
     if (path === '/auth/v1/logout') return route.fulfill({ status: 204 });
+    if (path === '/functions/v1/bloom-bookings/key' && req.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ publicKey: ALERT_KEY }) });
     if (auth !== `Bearer ${TOKEN}` && auth !== 'Bearer token-2') return json(route, 401, { message: 'JWT expired' });
     if (path === '/auth/v1/user') return json(route, 200, { email: 'owner@example.com' });
     if (path === '/rest/v1/rpc/am_i_admin') return json(route, 200, admin);
+    if (path === '/rest/v1/rpc/save_phone') { s.phones.set(body.p_endpoint, body); return route.fulfill({ status: 204 }); }
+    if (path === '/rest/v1/rpc/remove_phone') { s.phones.delete(body.p_endpoint); return route.fulfill({ status: 204 }); }
+    if (path === '/rest/v1/rpc/test_phone_alert') { s.tests.push(body.p_endpoint); return json(route, 200, s.phones.has(body.p_endpoint)); }
+    if (path === '/rest/v1/rpc/calendar_link') { if (body.p_reset || !s.calendarToken) s.calendarToken = crypto.randomBytes(32).toString('hex'); return json(route, 200, s.calendarToken); }
     if (path === '/rest/v1/rpc/item_conflicts') {
       const p = proposed({ date: body.p_date, start: body.p_start, end: body.p_end, setup: body.p_setup, pickup: body.p_pickup });
       return json(route, 200, conflicts(p, body.p_booking).flatMap(b => b.items.map(item_id => ({ item_id, booking_id: b.id, customer_name: bookingView(b).customer_name, start_local: b.start_local, end_local: b.end_local }))));
@@ -448,6 +460,169 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.click('#settings-form button');
   await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Saved'));
   assert(s.settings.hold_hours === 48, 'hold time saved');
+  await ctx.close();
+
+  /* Alerts on this phone, the app icon badge, opening Requests from an alert, and the calendar link */
+  const signedIn = t => localStorage.setItem('bloom-owner-session', JSON.stringify({ access_token: t, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, email: 'owner@example.com' }));
+  // Stand-ins for the phone's push subscription and app icon badge; the service worker itself is real.
+  const fakePhone = () => {
+    window.__badges = [];
+    navigator.setAppBadge = n => { window.__badges.push(n); return Promise.resolve(); };
+    navigator.clearAppBadge = () => { window.__badges.push(0); return Promise.resolve(); };
+    if (!window.PushManager) return;
+    const subscription = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/this-phone',
+      toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'B'.repeat(87), auth: 'C'.repeat(22) } }; },
+      unsubscribe() { localStorage.removeItem('fake-subscription'); return Promise.resolve(true); }
+    };
+    PushManager.prototype.subscribe = function (options) {
+      window.__subscribedWith = btoa(String.fromCharCode(...new Uint8Array(options.applicationServerKey)));
+      localStorage.setItem('fake-subscription', 'on');
+      return Promise.resolve(subscription);
+    };
+    PushManager.prototype.getSubscription = () => Promise.resolve(localStorage.getItem('fake-subscription') ? subscription : null);
+  };
+  const until = async (test, ms = 5000) => { const end = Date.now() + ms; while (!test() && Date.now() < end) await new Promise(r => setTimeout(r, 50)); return test(); };
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications', 'clipboard-read', 'clipboard-write'] });
+  s = await fakeSupabase(ctx, { extra: [request(310, '12:00', 'garden-wall'), request(311, '16:00', 'red-rose-wall')] });
+  await ctx.addInitScript(signedIn, TOKEN);
+  await ctx.addInitScript(fakePhone);
+  p = await ctx.newPage();
+  const alertErrors = [];
+  p.on('pageerror', e => alertErrors.push(e.message));
+  p.on('dialog', d => d.accept());
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.waitForFunction(() => window.__badges.includes(2));
+  assert(true, 'the app icon badge shows the 2 waiting requests');
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-on', { state: 'visible' });
+  assert((await p.textContent('#alerts-text')).startsWith('Get an alert on this phone') && await p.isHidden('#alerts-test') && await p.isHidden('#alerts-off'), 'alerts start off, with a button to turn them on');
+  await p.waitForFunction(() => !document.getElementById('calendar-add').disabled);
+  assert(s.log.some(l => l.path === '/rest/v1/rpc/calendar_link' && l.body.p_reset === false), 'the calendar link is fetched when More opens');
+  assert(s.log.some(l => l.path === '/functions/v1/bloom-bookings/key' && l.method === 'POST' && !l.auth), 'the alert key is fetched before the tap, without the sign-in');
+  await p.click('#alerts-on');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Alerts are on'));
+  const savedPhone = s.phones.get('https://fcm.googleapis.com/fcm/send/this-phone');
+  assert(savedPhone && savedPhone.p_p256dh === 'B'.repeat(87) && savedPhone.p_auth === 'C'.repeat(22), 'turning alerts on saves this phone’s subscription');
+  assert(Buffer.from(await p.evaluate(() => window.__subscribedWith), 'base64').toString('base64url') === ALERT_KEY, 'the phone subscribes with the key from the edge function');
+  await p.waitForSelector('#alerts-test', { state: 'visible' });
+  assert(await p.isHidden('#alerts-on') && await p.isVisible('#alerts-off') && (await p.textContent('#alerts-text')).startsWith('Alerts are on for this phone'), 'then it offers a test and turning them off');
+  await p.click('#alerts-test');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Test alert sent'));
+  assert(s.tests[0] === 'https://fcm.googleapis.com/fcm/send/this-phone', 'a test goes to this phone');
+
+  // The real service worker shows an alert pushed to it (delivered through DevTools instead of a push service).
+  const cdp = await ctx.newCDPSession(p);
+  const registrations = [];
+  cdp.on('ServiceWorker.workerRegistrationUpdated', e => registrations.push(...e.registrations));
+  await cdp.send('ServiceWorker.enable');
+  await until(() => registrations.some(r => r.scopeURL === `${BASE}/owner/`));
+  const pushed = { title: 'New request: Maria Lopez', body: 'Sat, Oct 2, 2 PM – 6 PM · Garden flower wall', url: './?open=requests', tag: 'request-310', badge: 2 };
+  await cdp.send('ServiceWorker.deliverPushMessage', { origin: new URL(BASE).origin, registrationId: registrations.find(r => r.scopeURL === `${BASE}/owner/`).registrationId, data: JSON.stringify(pushed) });
+  let shown = [];
+  for (let tries = 0; tries < 100 && !shown.length; tries++) {
+    shown = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map(n => ({ title: n.title, body: n.body, tag: n.tag, url: n.data && n.data.url })));
+    if (!shown.length) await p.waitForTimeout(100);
+  }
+  assert(shown.length === 1 && shown[0].title === pushed.title && shown[0].body === pushed.body && shown[0].tag === 'request-310' && shown[0].url === './?open=requests', `the service worker shows the pushed alert with its text: ${JSON.stringify(shown)}`);
+
+  // An alert arriving while the app is open refreshes the counts; tapping one opens Requests.
+  const counted = () => s.log.filter(l => l.path === '/rest/v1/owner_bookings' && l.search.includes('select=id&status=eq.requested')).length;
+  const countedBefore = counted();
+  await p.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { refresh: true } })));
+  assert(await until(() => counted() > countedBefore), 'an alert arriving while the app is open refreshes the request count');
+  await p.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { open: 'requests' } })));
+  await p.waitForFunction(() => !document.getElementById('screen-bookings').hidden && document.querySelectorAll('#booking-list li').length === 2);
+  assert(await p.getAttribute('[data-list="requests"]', 'aria-pressed') === 'true', 'tapping an alert while the app is open shows the Requests list');
+  await p.goto(`${BASE}/owner/?open=requests`, { waitUntil: 'networkidle' });
+  await p.waitForFunction(() => !document.getElementById('screen-bookings').hidden && document.querySelectorAll('#booking-list li').length === 2);
+  assert(await p.getAttribute('[data-list="requests"]', 'aria-pressed') === 'true' && !p.url().includes('open='), 'opening the app from an alert shows the Requests list, and the address is tidied');
+
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-off', { state: 'visible' });
+  await p.click('#alerts-off');
+  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Alerts are off for this phone.');
+  assert(!s.phones.size && await p.evaluate(() => localStorage.getItem('fake-subscription') === null) && await p.isVisible('#alerts-on'), 'turning alerts off forgets the phone and unsubscribes it');
+
+  // Calendar link: copy, add as a subscription, make a new one.
+  await p.waitForFunction(() => !document.getElementById('calendar-copy').disabled);
+  const feedUrl = token => `https://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/calendar/${token}.ics`;
+  await p.click('#calendar-copy');
+  await p.waitForFunction(() => document.getElementById('calendar-status').textContent.startsWith('Link copied'));
+  assert(await p.evaluate(() => navigator.clipboard.readText()) === feedUrl(s.calendarToken), 'Copy puts the private calendar link on the clipboard');
+  const oldToken = s.calendarToken;
+  await p.click('#calendar-reset');
+  await p.waitForFunction(() => document.getElementById('calendar-status').textContent.startsWith('New link made'));
+  assert(s.calendarToken !== oldToken && s.log.some(l => l.path === '/rest/v1/rpc/calendar_link' && l.body.p_reset === true), 'Make a new link replaces the code after asking');
+  await p.click('#calendar-copy');
+  await p.waitForFunction(() => document.getElementById('calendar-status').textContent.startsWith('Link copied'));
+  assert(await p.evaluate(() => navigator.clipboard.readText()) === feedUrl(s.calendarToken), 'and the new link is the one copied');
+  // Last, because the page hands this link to the phone's Calendar app.
+  const navs = [];
+  await cdp.send('Page.enable');
+  cdp.on('Page.frameRequestedNavigation', e => navs.push(e.url));
+  await p.click('#calendar-add');
+  assert(await until(() => navs.length > 0) && navs[0] === feedUrl(s.calendarToken).replace('https:', 'webcal:'), `Add opens the link as a calendar subscription: ${navs[0]}`);
+  assert(!alertErrors.length, 'no page errors: ' + alertErrors.join('; '));
+  await ctx.close();
+
+  /* Signing out turns alerts off on that phone */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'] });
+  s = await fakeSupabase(ctx);
+  await ctx.addInitScript(signedIn, TOKEN);
+  await ctx.addInitScript(fakePhone);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-on', { state: 'visible' });
+  await p.click('#alerts-on');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Alerts are on'));
+  assert(s.phones.size === 1, 'alerts on before signing out');
+  await p.click('#screen-more [data-action="sign-out"]');
+  await p.waitForSelector('#signin', { state: 'visible' });
+  assert(!s.phones.size && await p.evaluate(() => localStorage.getItem('fake-subscription') === null), 'signing out turns alerts off: the phone is forgotten and unsubscribed');
+  await ctx.close();
+
+  /* Where alerts can't work yet: blocked in the phone's settings, and iPhone Safari before Add to Home Screen */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await fakeSupabase(ctx);
+  await ctx.addInitScript(signedIn, TOKEN);
+  await ctx.addInitScript(() => Object.defineProperty(Notification, 'permission', { get: () => 'denied' }));
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForFunction(() => document.getElementById('alerts-text').textContent.startsWith('Alerts are blocked'));
+  assert(await p.isHidden('#alerts-on') && await p.isHidden('#alerts-test') && await p.isHidden('#alerts-off'), 'blocked alerts say where to allow them, with no buttons');
+  await ctx.close();
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+  await fakeSupabase(ctx);
+  await ctx.addInitScript(signedIn, TOKEN);
+  await ctx.addInitScript(() => { delete window.PushManager; });
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForFunction(() => document.getElementById('alerts-text').textContent.startsWith('On iPhone, alerts work in the app on your Home Screen'));
+  assert(await p.isHidden('#alerts-on'), 'iPhone Safari is told to add the app to the Home Screen first');
+  await ctx.close();
+
+  /* Android: a server problem with alerts says so; "Add to my calendar" opens Google Calendar */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', permissions: ['notifications'], userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36' });
+  s = await fakeSupabase(ctx);
+  await ctx.route('https://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/key', r => r.fulfill({ status: 500, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"error":"failed"}' }));
+  const google = [];
+  await ctx.route('https://calendar.google.com/**', r => { google.push(r.request().url()); return r.abort(); });
+  await ctx.addInitScript(signedIn, TOKEN);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-on', { state: 'visible' });
+  await p.click('#alerts-on');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Alerts couldn’t be turned on'));
+  assert(await p.textContent('#toast') === 'Alerts couldn’t be turned on (request failed, 500).', 'a server problem is reported as one, not as weak signal');
+  await p.waitForFunction(() => !document.getElementById('calendar-add').disabled);
+  await p.click('#calendar-add');
+  assert(await until(() => google.length > 0) && new URL(google[0]).searchParams.get('cid') === `webcal://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/calendar/${s.calendarToken}.ics`,
+    `on Android, Add to my calendar opens Google Calendar with the link: ${google[0]}`);
   await ctx.close();
 
   /* Old address */

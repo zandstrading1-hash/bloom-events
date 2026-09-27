@@ -19,6 +19,7 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 - `site.js` handles navigation, gallery interactions, rental picks, the availability calendar and the booking request.
 - `owner/` is Bloom Bookings, the owner's app for bookings, customers and the calendar. It isn't linked from the site and is hidden from search engines; `admin.html` just forwards to it.
 - `supabase/schema.sql` sets up the bookings database; `.github/workflows/keep-calendar-awake.yml` keeps it from pausing.
+- `supabase/functions/bloom-bookings/index.ts` is the Supabase edge function that sends phone alerts and serves the private calendar link.
 - `assets/` contains website-ready photos and videos.
 - `design/` holds the logo generator and logo concepts, `tests/` the browser checks, `supabase/` the database setup, and `docs/next-steps.md` the open questions. None of these are part of the website; don't deploy them.
 
@@ -67,12 +68,20 @@ Open https://zandstrading1-hash.github.io/bloom-events/owner/ and sign in with a
 - **Requests:** website requests land in the Requests list, with a count on the Bookings tab. Each shows when it was sent and how long it holds its items; Confirm or Decline it (only if it's still waiting), and use Text or Email to reply (a greeting is filled in). Editing a request takes it over: it no longer expires.
 - **Lists:** upcoming, past and cancelled bookings, searchable by name, phone, address, venue or notes.
 - **Customers:** everyone with a booking or added by hand, with call, text and email buttons, notes and their booking history.
-- **More:** install instructions, default setup and pickup time, how long website requests hold their items, change password, sign out.
+- **Alerts:** on More, "Turn on alerts" makes this phone buzz the moment a website request arrives, with the customer, time and items; tapping the alert opens Requests. The app icon shows how many requests are waiting. On iPhone this needs iOS 16.4 or later and the app opened from the Home Screen. "Send a test alert" checks it; alerts can be turned off per phone, and signing out turns them off on that phone.
+- **Calendar link:** on More, "Add to my calendar" subscribes the phone's Calendar app to her confirmed bookings and holds (six months back to two years ahead), which then update by themselves. The link contains a long random code; "make a new link" replaces it if it's ever shared by mistake.
+- **More:** install instructions, alerts, the calendar link, default setup and pickup time, how long website requests hold their items, change password, sign out.
 
 Accounts:
 
-- **Public sign-ups are off,** so nobody can create an account from the app. To add someone: in Supabase go to Authentication, Users, Add user, Create new user, enter their email and a password, and check "Auto Confirm User". Then, in the SQL editor, run `insert into private.admins (email) values ('name@example.com');` (lowercase). Only emails in `private.admins` can see or change anything.
+- **Public sign-ups are off,** so nobody can create an account from the app. To add someone: in Supabase go to Authentication, Users, Add user, Create new user, enter their email and a password, and check "Auto Confirm User". Then, in the SQL editor, run `insert into private.admins (email) values ('name@example.com');` (lowercase). Only emails in `private.admins` can see or change anything. To take someone's access away, delete their email from `private.admins`: their alerts stop too. If they had the calendar link, "make a new link" on More so their copy stops updating.
 - **Forgot password or first time:** "Email me a sign-in link" on the sign-in screen sends a link, then the app asks for a new password. Supabase's built-in email only delivers to members of the Supabase organization (2 emails an hour); for anyone else, reset the password in Authentication, Users. The link returns to `owner/`, which must stay listed under Authentication, URL Configuration in Supabase; update it there if the site moves to its own domain.
+
+How alerts and the calendar link work:
+
+- **Edge function `bloom-bookings`** (`supabase/functions/bloom-bookings/index.ts`), deployed from the Supabase dashboard (Edge Functions, then paste the file into the editor) with JWT verification turned off, because the database and phones' calendars call it without a sign-in. It uses only Web Crypto and `fetch`, and reaches the database with the service role through the functions in `schema.sql` (`claim_alerts`, `finish_alerts`, `alert_public_key`, `save_alert_keys`, `calendar_feed`), which nobody else can call.
+- **Sending:** a website request (not the owner's own bookings) queues an alert in `private.alerts` and asks the function to send it through `pg_net`. The function encrypts it for each phone (Web Push, RFC 8291) and signs it with a key pair it made on first use and stored in `private.alert_keys`; no keys are pasted anywhere. Alerts that couldn't go out are retried every 5 minutes for a day (pg_cron job `bloom-send-alerts`), and phones the push service no longer knows are forgotten. A failed alert never stops a request from being saved.
+- **If alerts stop arriving:** on the phone, More, "Send a test alert". If none comes, check the function's logs in the dashboard (each send logs the push service's status codes; 201 means delivered) and that the phone still allows notifications for Bloom Bookings.
 
 ## Tests
 
@@ -85,7 +94,7 @@ npx playwright install chromium   # skip if a Chromium is available; set CHROMIU
 npm test
 ```
 
-`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers the Rentals calendar and time pickers, the Book page check, requests sent into the owner's app (and Supabase's answers to them), and the text or email fallback when Supabase is down; `owner-flow.js` covers the owner app (sign-in, calendar, booking form and conflicts, lists, customers, settings, password, home-screen install and offline start) on a phone set to Tokyo time; `site-check.js` loads every page, including the owner app signed out, signed in and with the booking form open, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
+`booking-flow.js` walks through picking rentals and building a booking request; `calendar-flow.js` covers the Rentals calendar and time pickers, the Book page check, requests sent into the owner's app (and Supabase's answers to them), and the text or email fallback when Supabase is down; `owner-flow.js` covers the owner app (sign-in, calendar, booking form and conflicts, lists, customers, settings, password, alerts including the service worker showing a pushed alert, the calendar link, home-screen install and offline start) on a phone set to Tokyo time; `alerts-function.mjs` runs the edge function in Node without Supabase, checking its encryption and signatures against independent implementations, its sending and retry rules against a stand-in push service, and its calendar file with a calendar parser (it doesn't need the site served); `site-check.js` loads every page, including the owner app signed out, signed in, with the booking form open and on More, at four widths and checks accessibility (axe), failed requests, JS errors, sideways scrolling and that the bottom Book bar never covers the footer. Set `BASE_URL` if the site isn't at http://127.0.0.1:8765, and `CHROMIUM_PATH` to use an installed Chrome instead of downloading one.
 
 ## Publication status
 
