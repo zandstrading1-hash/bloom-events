@@ -195,8 +195,10 @@
     }
   });
 
-  document.querySelectorAll('[data-action="sign-out"]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-action="sign-out"]').forEach(button => button.addEventListener('click', async () => {
     const token = session && session.access_token;
+    // A phone that signs out stops getting alerts, so an old or shared phone doesn't keep showing requests.
+    await stopAlerts().catch(() => {});
     signedOut('You’re signed out.');
     if (token) request('/auth/v1/logout', { method: 'POST', token }).catch(() => {});
   }));
@@ -702,7 +704,7 @@
   let alertKey = null;
   const loadAlertKey = () => {
     alertKey = alertKey || fetch(`${FUNCTIONS}/key`, { method: 'POST' })
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`request failed, ${r.status}`))))
+      .then(r => (r.ok ? r.json() : Promise.reject(Object.assign(new Error(`request failed, ${r.status}`), { status: r.status }))))
       .then(data => data.publicKey)
       .catch(e => { alertKey = null; throw e; });
     return alertKey;
@@ -714,6 +716,14 @@
   const savePhone = subscription => {
     const { endpoint, keys } = subscription.toJSON();
     return rpc('save_phone', { p_endpoint: endpoint, p_p256dh: keys.p256dh, p_auth: keys.auth });
+  };
+  // Signing out: the push service forgets the phone even when the database can't be told right now.
+  const stopAlerts = async () => {
+    if (!alertsWork()) return;
+    const subscription = await phoneSubscription();
+    if (!subscription) return;
+    await rpc('remove_phone', { p_endpoint: subscription.endpoint }).catch(() => {});
+    await subscription.unsubscribe();
   };
   // A phone can renew its subscription on its own; saving it on every start keeps the database current.
   const keepPhoneSignedUp = async () => {
@@ -754,7 +764,11 @@
       await savePhone(await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey }));
       toast('Alerts are on. Send a test to see what one looks like.');
     } catch (e) {
-      if (e.status !== 401) toast(e.status ? `Alerts couldn’t be turned on (${e.message}).` : 'Alerts couldn’t be turned on. Check your signal and try again.');
+      if (e.status !== 401) {
+        toast(e.status ? `Alerts couldn’t be turned on (${e.message}).`
+          : e instanceof TypeError ? 'Alerts couldn’t be turned on. Check your signal and try again.'
+          : `This phone couldn’t sign up for alerts (${e.message || e.name}). Try again, or check its notification settings.`);
+      }
     } finally {
       button.disabled = false;
       paintAlerts();
@@ -802,11 +816,15 @@
       if (e.status !== 401) say($('calendar-status'), e.status ? `The calendar link couldn’t load (${e.message}).` : 'You’re offline. The calendar link loads when you’re back online.', true);
     }
   };
-  $('calendar-add').addEventListener('click', () => { location.href = calendarUrl.replace(/^https:/, 'webcal:'); });
+  $('calendar-add').addEventListener('click', () => {
+    const webcal = calendarUrl.replace(/^https:/, 'webcal:');
+    // Android has nothing that opens webcal links; Google Calendar's site adds the subscription instead.
+    location.href = /android/i.test(navigator.userAgent) ? `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}` : webcal;
+  });
   $('calendar-copy').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(calendarUrl);
-      say($('calendar-status'), 'Link copied. In Google Calendar, add it under Other calendars, then From URL.');
+      say($('calendar-status'), 'Link copied. In Google Calendar on a computer, add it under Other calendars, then From URL.');
     } catch {
       say($('calendar-status'), `Copy this link: ${calendarUrl}`);
     }

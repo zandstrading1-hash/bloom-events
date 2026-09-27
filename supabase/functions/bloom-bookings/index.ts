@@ -64,14 +64,16 @@ export const push = async (phone, message, keys) => {
   const response = await fetch(phone.endpoint, {
     method: 'POST',
     headers: { Authorization: await vapid(phone.endpoint, keys), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high' },
-    body: await encrypt(JSON.stringify(message), phone)
+    body: await encrypt(JSON.stringify(message), phone),
+    signal: AbortSignal.timeout(10000)
   });
   await response.arrayBuffer().catch(() => {});
   return response.status;
 };
 
 // An alert is tried again later only when every phone failed for a reason that can pass
-// (no connection, rate limit, push service down). Phones the push service no longer knows are forgotten.
+// (no connection or no answer within 10 seconds, rate limit, push service down). Phones the push service
+// no longer knows are forgotten.
 const mayPass = status => status === 0 || status === 429 || status >= 500;
 export const sendAlerts = async rpc => {
   const { keys, alerts } = await rpc('claim_alerts');
@@ -90,8 +92,10 @@ export const sendAlerts = async rpc => {
   return { alerts: alerts.length, sent };
 };
 
-// Calendar file (RFC 5545): text escaped, lines folded to 75 bytes, CRLF line ends.
-const escapeText = value => String(value).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+// Calendar file (RFC 5545): text escaped, lines folded to 75 bytes, CRLF line ends. Its text can't hold
+// control characters, and visitors can type them into a request, so they're dropped.
+const escapeText = value => String(value).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+  .replace(/\r\n?|\n/g, '\\n').replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '');
 const fold = line => {
   const lines = [];
   let current = '';

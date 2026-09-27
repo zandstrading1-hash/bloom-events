@@ -145,7 +145,9 @@ const events = [
   { uid: 'booking-1@bloom-events', start: '20261205T190000Z', end: '20261205T230000Z', status: 'CONFIRMED',
     summary: 'Zoë Smith · Ivory flower wall and White pedestals', location: '9 Elm St, Macomb; side door',
     description: 'Setup from 12 PM, pickup by 8 PM\nVenue: Elm Hall\nNotes: Bring the pink runner, the tall vases, and the ✿ sign; call first \\ thanks. '.repeat(3).trim() },
-  { uid: 'booking-2@bloom-events', start: '20261207T160000Z', end: '20261207T180000Z', status: 'TENTATIVE', summary: 'On hold: Web Hold · Champagne rose wall', location: null, description: 'On hold (website request) until Wed, Dec 2, 3 PM' }
+  { uid: 'booking-2@bloom-events', start: '20261207T160000Z', end: '20261207T180000Z', status: 'TENTATIVE', summary: 'On hold: Web Hold · Champagne rose wall', location: null, description: 'On hold (website request) until Wed, Dec 2, 3 PM' },
+  // A visitor typed a bare carriage return and a control character into their request.
+  { uid: 'booking-3@bloom-events', start: '20261208T160000Z', end: '20261208T180000Z', status: 'TENTATIVE', summary: 'On hold: Sly\rEND:VEVENT\x07 · Bloom bar', location: 'Hall\r\nB', description: 'Line one\rBEGIN:VEVENT\x00\x1B' }
 ];
 const feedDb = async (name, args) => (name === 'calendar_feed' && args.p_token === TOKEN ? events : null);
 const get = path => fn.handle(new Request(`https://example.supabase.co${path}`), feedDb);
@@ -156,8 +158,10 @@ assert(ics.endsWith('\r\n') && !/[^\r]\n/.test(ics), 'every line ends with CRLF'
 assert(ics.split('\r\n').every(line => Buffer.byteLength(line) <= 75), 'no line is longer than 75 bytes (long text is folded)');
 const parsed = new ICAL.Component(ICAL.parse(ics));
 const vevents = parsed.getAllSubcomponents('vevent');
-assert(parsed.getFirstPropertyValue('x-wr-calname') === 'Bloom bookings' && vevents.length === 2, 'a calendar parser reads the feed and both events');
-const [e1, e2] = vevents.map(v => new ICAL.Event(v));
+assert(parsed.getFirstPropertyValue('x-wr-calname') === 'Bloom bookings' && vevents.length === 3, 'a calendar parser reads the feed and all three events');
+const [e1, e2, e3] = vevents.map(v => new ICAL.Event(v));
+assert(!/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]|\r(?!\n)/.test(ics) && e3.summary === 'On hold: Sly\nEND:VEVENT · Bloom bar' && e3.location === 'Hall\nB' && e3.description === 'Line one\nBEGIN:VEVENT',
+  'line breaks and control characters typed by a visitor can’t break the file or add events');
 assert(e1.summary === events[0].summary && e1.location === events[0].location && e1.description === events[0].description, 'names, commas, semicolons, backslashes, line breaks and symbols survive exactly');
 assert(e1.startDate.toJSDate().toISOString() === '2026-12-05T19:00:00.000Z' && e1.endDate.toJSDate().toISOString() === '2026-12-05T23:00:00.000Z', 'times are exact UTC instants');
 assert(vevents[0].getFirstPropertyValue('status') === 'CONFIRMED' && vevents[1].getFirstPropertyValue('status') === 'TENTATIVE' && e2.location === null, 'status is kept; an event without a place has none');

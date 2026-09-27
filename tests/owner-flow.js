@@ -566,6 +566,23 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   assert(!alertErrors.length, 'no page errors: ' + alertErrors.join('; '));
   await ctx.close();
 
+  /* Signing out turns alerts off on that phone */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'] });
+  s = await fakeSupabase(ctx);
+  await ctx.addInitScript(signedIn, TOKEN);
+  await ctx.addInitScript(fakePhone);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-on', { state: 'visible' });
+  await p.click('#alerts-on');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Alerts are on'));
+  assert(s.phones.size === 1, 'alerts on before signing out');
+  await p.click('#screen-more [data-action="sign-out"]');
+  await p.waitForSelector('#signin', { state: 'visible' });
+  assert(!s.phones.size && await p.evaluate(() => localStorage.getItem('fake-subscription') === null), 'signing out turns alerts off: the phone is forgotten and unsubscribed');
+  await ctx.close();
+
   /* Where alerts can't work yet: blocked in the phone's settings, and iPhone Safari before Add to Home Screen */
   ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   await fakeSupabase(ctx);
@@ -586,6 +603,26 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.click('[data-tab="more"]');
   await p.waitForFunction(() => document.getElementById('alerts-text').textContent.startsWith('On iPhone, alerts work in the app on your Home Screen'));
   assert(await p.isHidden('#alerts-on'), 'iPhone Safari is told to add the app to the Home Screen first');
+  await ctx.close();
+
+  /* Android: a server problem with alerts says so; "Add to my calendar" opens Google Calendar */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', permissions: ['notifications'], userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36' });
+  s = await fakeSupabase(ctx);
+  await ctx.route('https://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/key', r => r.fulfill({ status: 500, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"error":"failed"}' }));
+  const google = [];
+  await ctx.route('https://calendar.google.com/**', r => { google.push(r.request().url()); return r.abort(); });
+  await ctx.addInitScript(signedIn, TOKEN);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="more"]');
+  await p.waitForSelector('#alerts-on', { state: 'visible' });
+  await p.click('#alerts-on');
+  await p.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Alerts couldn’t be turned on'));
+  assert(await p.textContent('#toast') === 'Alerts couldn’t be turned on (request failed, 500).', 'a server problem is reported as one, not as weak signal');
+  await p.waitForFunction(() => !document.getElementById('calendar-add').disabled);
+  await p.click('#calendar-add');
+  assert(await until(() => google.length > 0) && new URL(google[0]).searchParams.get('cid') === `webcal://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/calendar/${s.calendarToken}.ics`,
+    `on Android, Add to my calendar opens Google Calendar with the link: ${google[0]}`);
   await ctx.close();
 
   /* Old address */

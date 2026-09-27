@@ -737,15 +737,18 @@ $$;
 -- Every 15 minutes, expire website holds that ran out, and every 5 minutes retry alerts that didn't go out.
 -- Skipped where pg_net or pg_cron isn't available (local tests); the functions above also expire stale
 -- holds before they save anything, and a new request asks for its alert right away.
+-- Each extension is created only once: on Supabase, "create extension if not exists" re-runs its access setup
+-- even when the extension is already there.
 do $$
 begin
-  if exists (select 1 from pg_available_extensions where name = 'pg_net') then
-    create extension if not exists pg_net with schema extensions;
+  if exists (select 1 from pg_available_extensions where name = 'pg_net')
+     and not exists (select 1 from pg_extension where extname = 'pg_net') then
+    create extension pg_net with schema extensions;
   end if;
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
-    create extension if not exists pg_cron with schema pg_catalog;
-    grant usage on schema cron to postgres;
-    grant all privileges on all tables in schema cron to postgres;
+    if not exists (select 1 from pg_extension where extname = 'pg_cron') then
+      create extension pg_cron with schema pg_catalog;
+    end if;
     perform cron.schedule('bloom-expire-holds', '*/15 * * * *', 'select private.expire_holds()');
     perform cron.schedule('bloom-send-alerts', '*/5 * * * *', 'select private.send_alerts()');
   end if;
