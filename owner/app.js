@@ -154,6 +154,7 @@
     }).catch(() => {});
     go(currentTab);
     countRequests();
+    keepPhoneSignedUp();
   };
 
   $('password-form').addEventListener('submit', async e => {
@@ -227,7 +228,7 @@
     if (tab === 'calendar') showCalendar();
     if (tab === 'bookings') loadBookings(true);
     if (tab === 'customers') loadCustomers();
-    if (tab === 'more') paintInstall();
+    if (tab === 'more') { paintInstall(); paintAlerts(); paintCalendarLink(); }
   };
   document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go(b.dataset.tab)));
   let countId = 0;
@@ -238,6 +239,7 @@
     const n = rows.length;
     [$('tab-requests'), $('requests-count')].forEach(badge => { badge.hidden = !n; badge.textContent = n; });
     $('tab-requests').setAttribute('aria-label', `${n} request${n === 1 ? '' : 's'} waiting`);
+    if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
     }).catch(() => {});
   };
   const refresh = () => {
@@ -569,6 +571,10 @@
     }
   });
   $('booking-more').addEventListener('click', () => loadBookings(false));
+  const pickRequests = () => {
+    listKind = 'requests';
+    document.querySelectorAll('[data-list]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.list === 'requests')));
+  };
 
   /* Customers */
   const customerDialog = $('customer-dialog');
@@ -686,6 +692,135 @@
     }
   });
 
+  /* Alerts on this phone, sent by the bloom-bookings edge function when a website request arrives */
+  const FUNCTIONS = `${DB.url}/functions/v1/bloom-bookings`;
+  const alertsWork = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const fromB64u = text => {
+    const plain = text.replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(plain + '='.repeat((4 - plain.length % 4) % 4)), c => c.charCodeAt(0));
+  };
+  let alertKey = null;
+  const loadAlertKey = () => {
+    alertKey = alertKey || fetch(`${FUNCTIONS}/key`, { method: 'POST' })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`request failed, ${r.status}`))))
+      .then(data => data.publicKey)
+      .catch(e => { alertKey = null; throw e; });
+    return alertKey;
+  };
+  const phoneSubscription = async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return registration ? registration.pushManager.getSubscription() : null;
+  };
+  const savePhone = subscription => {
+    const { endpoint, keys } = subscription.toJSON();
+    return rpc('save_phone', { p_endpoint: endpoint, p_p256dh: keys.p256dh, p_auth: keys.auth });
+  };
+  // A phone can renew its subscription on its own; saving it on every start keeps the database current.
+  const keepPhoneSignedUp = async () => {
+    if (!alertsWork() || Notification.permission !== 'granted') return;
+    const subscription = await phoneSubscription().catch(() => null);
+    if (subscription) savePhone(subscription).catch(() => {});
+  };
+  const paintAlerts = async () => {
+    const buttons = (on, test, off) => { $('alerts-on').hidden = !on; $('alerts-test').hidden = !test; $('alerts-off').hidden = !off; };
+    if (!alertsWork()) {
+      buttons(false, false, false);
+      $('alerts-text').textContent = !/iphone|ipad|ipod/i.test(navigator.userAgent) ? 'This browser can’t show alerts. Open Bloom Bookings on your phone to turn them on.'
+        : standalone() ? 'Alerts need iOS 16.4 or later. Update your iPhone in Settings, then turn them on here.'
+        : 'On iPhone, alerts work in the app on your Home Screen. Add it there (see above), open it from the Home Screen, then turn alerts on here.';
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      buttons(false, false, false);
+      $('alerts-text').textContent = 'Alerts are blocked for Bloom Bookings. Allow its notifications in your phone’s Settings, then come back here.';
+      return;
+    }
+    const subscription = Notification.permission === 'granted' ? await phoneSubscription().catch(() => null) : null;
+    buttons(!subscription, Boolean(subscription), Boolean(subscription));
+    $('alerts-text').textContent = subscription
+      ? 'Alerts are on for this phone. You’ll get one each time someone sends a booking request from the website.'
+      : 'Get an alert on this phone the moment someone sends a booking request from the website.';
+    // Fetched now so the tap below can ask for permission straight away.
+    if (!subscription) loadAlertKey().catch(() => {});
+  };
+  $('alerts-on').addEventListener('click', async () => {
+    const button = $('alerts-on');
+    button.disabled = true;
+    try {
+      // iPhone only shows the permission question while it is handling the tap, so ask before anything else.
+      if (await Notification.requestPermission() !== 'granted') return;
+      const applicationServerKey = fromB64u(await loadAlertKey());
+      const registration = await navigator.serviceWorker.ready;
+      await savePhone(await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey }));
+      toast('Alerts are on. Send a test to see what one looks like.');
+    } catch (e) {
+      if (e.status !== 401) toast(e.status ? `Alerts couldn’t be turned on (${e.message}).` : 'Alerts couldn’t be turned on. Check your signal and try again.');
+    } finally {
+      button.disabled = false;
+      paintAlerts();
+    }
+  });
+  $('alerts-test').addEventListener('click', async () => {
+    try {
+      const subscription = await phoneSubscription();
+      if (!subscription) { paintAlerts(); return; }
+      await savePhone(subscription);
+      const sent = await rpc('test_phone_alert', { p_endpoint: subscription.endpoint });
+      toast(sent ? 'Test alert sent. It should arrive in a few seconds.' : 'This phone isn’t signed up for alerts. Turn them on again.');
+    } catch (e) {
+      if (e.status !== 401) toast(e.status ? `Couldn’t send a test (${e.message}).` : 'You’re offline, so a test can’t be sent yet.');
+    }
+  });
+  $('alerts-off').addEventListener('click', async () => {
+    try {
+      const subscription = await phoneSubscription();
+      if (subscription) {
+        await rpc('remove_phone', { p_endpoint: subscription.endpoint });
+        await subscription.unsubscribe();
+      }
+      toast('Alerts are off for this phone.');
+    } catch (e) {
+      if (e.status !== 401) toast(e.status ? `Couldn’t turn alerts off (${e.message}).` : 'You’re offline, so alerts can’t be turned off yet.');
+    } finally {
+      paintAlerts();
+    }
+  });
+
+  /* The private calendar link. It's fetched when this screen opens, because copying only works during the tap. */
+  let calendarUrl = '';
+  const calendarButtons = ['calendar-add', 'calendar-copy', 'calendar-reset'];
+  const useCalendarLink = token => {
+    calendarUrl = token ? `${FUNCTIONS}/calendar/${token}.ics` : '';
+    calendarButtons.forEach(id => { $(id).disabled = !token; });
+  };
+  const paintCalendarLink = async () => {
+    say($('calendar-status'));
+    try {
+      useCalendarLink(await rpc('calendar_link', { p_reset: false }));
+    } catch (e) {
+      useCalendarLink(null);
+      if (e.status !== 401) say($('calendar-status'), e.status ? `The calendar link couldn’t load (${e.message}).` : 'You’re offline. The calendar link loads when you’re back online.', true);
+    }
+  };
+  $('calendar-add').addEventListener('click', () => { location.href = calendarUrl.replace(/^https:/, 'webcal:'); });
+  $('calendar-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(calendarUrl);
+      say($('calendar-status'), 'Link copied. In Google Calendar, add it under Other calendars, then From URL.');
+    } catch {
+      say($('calendar-status'), `Copy this link: ${calendarUrl}`);
+    }
+  });
+  $('calendar-reset').addEventListener('click', async () => {
+    if (!confirm('Make a new calendar link? The old one stops working, so calendars using it stop updating until you add the new one.')) return;
+    try {
+      useCalendarLink(await rpc('calendar_link', { p_reset: true }));
+      say($('calendar-status'), 'New link made. Remove the old Bloom bookings calendar from your phone, then tap “Add to my calendar” again.');
+    } catch (e) {
+      if (e.status !== 401) say($('calendar-status'), e.status ? `Couldn’t make a new link (${e.message}).` : 'You’re offline, so a new link can’t be made yet.', true);
+    }
+  });
+
   const passwordDialog = $('password-dialog');
   const askForPassword = intro => {
     $('password-new-form').reset();
@@ -709,7 +844,21 @@
     }
   });
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // From the service worker: an alert arrived (refresh), or one was tapped while the app was open.
+    navigator.serviceWorker.addEventListener('message', ({ data }) => {
+      if (!data || !session || $('shell').hidden) return;
+      if (data.open === 'requests') { pickRequests(); go('bookings'); }
+      if (data.refresh) refresh();
+    });
+  }
+  // Tapping an alert while the app is closed opens it here.
+  if (new URLSearchParams(location.search).get('open') === 'requests') {
+    history.replaceState(null, '', location.pathname + location.hash);
+    pickRequests();
+    currentTab = 'bookings';
+  }
 
   /* Arriving from an emailed sign-in link: the sign-in (or an error) is after the # */
   const fromLink = new URLSearchParams(location.hash.slice(1));

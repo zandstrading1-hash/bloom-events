@@ -25,13 +25,15 @@ const fakeSupabase = async page => {
     if (path.endsWith('/rpc/am_i_admin')) return json(r, true);
     if (path.endsWith('/owner_bookings')) return json(r, [ownerBooking]);
     if (path.endsWith('/settings')) return json(r, [{ setup_minutes: 120, pickup_minutes: 120 }]);
+    if (path.endsWith('/functions/v1/bloom-bookings/key')) return json(r, { publicKey: 'B'.repeat(87) });
+    if (path.endsWith('/rpc/calendar_link')) return json(r, 'ab'.repeat(32));
     return json(r, []);
   });
 };
 (async () => {
   const b = await chromium.launch(launchOpts);
-  // The owner app is checked signed out, signed in (calendar), and with the booking form open.
-  for (const pg of ['index','services','gallery','about','faq','contact','privacy','terms','booking-policy','accessibility','owner/index','owner/index-signed-in','owner/index-form']) {
+  // The owner app is checked signed out, signed in (calendar), with the booking form open, and on More (alerts, calendar link).
+  for (const pg of ['index','services','gallery','about','faq','contact','privacy','terms','booking-policy','accessibility','owner/index','owner/index-signed-in','owner/index-form','owner/index-more']) {
     for (const w of [1280, 820, 390, 350]) {
       const ctx = await b.newContext({ viewport: { width: w, height: 800 }, serviceWorkers: 'block' });
       const p = await ctx.newPage();
@@ -40,9 +42,10 @@ const fakeSupabase = async page => {
       const errs = [];
       p.on('response', r => { if (r.status() >= 400) errs.push(r.status() + ' ' + r.url()); });
       p.on('pageerror', e => errs.push(e.message));
-      await p.goto(`${BASE}/${pg.replace(/-(signed-in|form)$/, '')}.html`, { waitUntil: 'networkidle' });
+      await p.goto(`${BASE}/${pg.replace(/-(signed-in|form|more)$/, '')}.html`, { waitUntil: 'networkidle' });
       if (pg.startsWith('owner/index-')) await p.waitForSelector('.fc-event');
       if (pg === 'owner/index-form') { await p.click('#new-booking'); await p.waitForSelector('#form-dialog[open]'); }
+      if (pg === 'owner/index-more') { await p.click('[data-tab="more"]'); await p.waitForSelector('#calendar-add:not([disabled])'); await p.waitForSelector('#alerts-on', { state: 'visible' }); }
       let axeRes = '';
       if (w === 1280 || w === 390) { await p.addScriptTag({ content: axeSrc }); axeRes = (await p.evaluate(async () => (await axe.run(document, { resultTypes: ['violations'] })).violations.map(v => v.id + ' x' + v.nodes.length + ' ' + v.nodes[0].target.join(' ')))).join('; '); }
       const overflow = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);

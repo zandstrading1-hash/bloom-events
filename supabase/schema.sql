@@ -434,6 +434,282 @@ as $$ select private.is_admin() $$;
 revoke all on function public.am_i_admin() from public, anon;
 grant execute on function public.am_i_admin() to authenticated;
 
+-- Phone alerts and the calendar link. The edge function bloom-bookings (supabase/functions) sends the
+-- alerts and serves the calendar; it reaches these tables only through the service-role functions below.
+create or replace function private.item_names(ids text[]) returns text
+language plpgsql immutable set search_path = ''
+as $$
+declare
+  names text[] := array(
+    select n.name from (values
+      (1, 'ivory-wall', 'Ivory flower wall'), (2, 'garden-wall', 'Garden flower wall'), (3, 'pink-ombre-wall', 'Pink ombre wall'),
+      (4, 'red-rose-wall', 'Red rose wall'), (5, 'champagne-wall', 'Champagne rose wall'), (6, 'greenery-wall', 'Greenery wall'),
+      (7, 'ivory-texture-wall', 'Ivory textured wall'), (8, 'bloom-bar', 'Bloom bar'), (9, 'pedestals', 'White pedestals'),
+      (10, 'sweets-cart', 'Sweets cart')) n (ord, id, name)
+    where n.id = any (ids) order by n.ord);
+  n int := cardinality(names);
+begin
+  return case when n = 0 then null when n < 3 then array_to_string(names, ' and ')
+    else array_to_string(names[1:n - 1], ', ') || ' and ' || names[n] end;
+end
+$$;
+
+-- "2 PM" or "2:30 PM", Detroit time.
+create or replace function private.clock(t timestamptz) returns text
+language sql stable set search_path = ''
+as $$ select replace(to_char(t at time zone 'America/Detroit', 'FMHH12:MI AM'), ':00', '') $$;
+
+-- "Sat, Nov 25, 2 PM – 6 PM", with the year when it isn't this year.
+create or replace function private.when_text(s timestamptz, e timestamptz) returns text
+language sql stable set search_path = ''
+as $$
+  select to_char(s at time zone 'America/Detroit', 'Dy, Mon FMDD')
+    || case when extract(year from s at time zone 'America/Detroit') <> extract(year from now() at time zone 'America/Detroit')
+         then to_char(s at time zone 'America/Detroit', ', YYYY') else '' end
+    || ', ' || private.clock(s) || ' – ' || private.clock(e)
+$$;
+revoke all on function private.item_names(text[]), private.clock(timestamptz), private.when_text(timestamptz, timestamptz) from public;
+
+-- The key pair phones use to check that alerts really come from Bloom Bookings. Made once by the edge function.
+create table if not exists private.alert_keys (
+  id boolean primary key default true check (id),
+  public_key text not null check (public_key ~ '^[A-Za-z0-9_-]{87}$'),
+  private_key jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table private.alert_keys enable row level security;
+
+-- Phones that turned on alerts in the owner app, one row per phone.
+create table if not exists private.phones (
+  endpoint text primary key check (endpoint ~ '^https://[^\s]+$' and char_length(endpoint) <= 1000),
+  p256dh text not null check (p256dh ~ '^[A-Za-z0-9_-]{80,100}=*$'),
+  auth text not null check (auth ~ '^[A-Za-z0-9_-]{16,40}=*$'),
+  email text not null,
+  created_at timestamptz not null default now()
+);
+alter table private.phones enable row level security;
+
+-- Alerts waiting to be sent: one per new website request, or a test for one phone.
+create table if not exists private.alerts (
+  id bigint generated always as identity primary key,
+  booking_id bigint references public.bookings on delete cascade,
+  endpoint text references private.phones on delete cascade,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  sent_at timestamptz
+);
+create index if not exists alerts_waiting on private.alerts (id) where sent_at is null;
+alter table private.alerts enable row level security;
+
+-- Asks the edge function to send waiting alerts. Runs after a request is saved and every few minutes.
+-- It never raises: an alert must never stop a customer's request from being saved.
+create or replace function private.send_alerts() returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if exists (select 1 from private.alerts a where a.sent_at is null and a.created_at > now() - interval '1 day'
+               and (a.claimed_at is null or a.claimed_at < now() - interval '2 minutes'))
+     and exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'net' and p.proname = 'http_post') then
+    perform net.http_post(url := 'https://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/send',
+      body := '{}'::jsonb, timeout_milliseconds := 10000);
+  end if;
+exception when others then
+  null;
+end
+$$;
+revoke all on function private.send_alerts() from public;
+
+create or replace function private.alert_new_request() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if exists (select 1 from private.phones) then
+    insert into private.alerts (booking_id) values (new.id);
+    perform private.send_alerts();
+  end if;
+  return null;
+exception when others then
+  return null;
+end
+$$;
+revoke all on function private.alert_new_request() from public;
+drop trigger if exists bookings_alert on public.bookings;
+create trigger bookings_alert after insert on public.bookings
+  for each row when (new.source = 'website' and new.status = 'requested') execute function private.alert_new_request();
+
+-- For the owner app: turn alerts on or off for this phone, or send it a test.
+create or replace function public.save_phone(p_endpoint text, p_p256dh text, p_auth text) returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not private.is_admin() then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  insert into private.phones (endpoint, p256dh, auth, email) values (p_endpoint, p_p256dh, p_auth, lower(auth.jwt() ->> 'email'))
+  on conflict (endpoint) do update set p256dh = excluded.p256dh, auth = excluded.auth, email = excluded.email;
+exception when check_violation or not_null_violation then
+  raise exception 'invalid_phone' using errcode = '22023';
+end
+$$;
+
+create or replace function public.remove_phone(p_endpoint text) returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not private.is_admin() then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  delete from private.phones where endpoint = p_endpoint;
+end
+$$;
+
+create or replace function public.test_phone_alert(p_endpoint text) returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not private.is_admin() then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  if not exists (select 1 from private.phones where endpoint = p_endpoint) then
+    return false;
+  end if;
+  insert into private.alerts (endpoint) values (p_endpoint);
+  perform private.send_alerts();
+  return true;
+end
+$$;
+revoke all on function public.save_phone(text, text, text), public.remove_phone(text), public.test_phone_alert(text) from public, anon;
+grant execute on function public.save_phone(text, text, text), public.remove_phone(text), public.test_phone_alert(text) to authenticated;
+
+-- For the edge function only (service role): the key pair, and claiming and finishing alerts.
+create or replace function public.alert_public_key() returns text
+language sql stable security definer set search_path = ''
+as $$ select k.public_key from private.alert_keys k $$;
+
+create or replace function public.save_alert_keys(p_public text, p_private jsonb) returns text
+language sql security definer set search_path = ''
+as $$
+  insert into private.alert_keys (public_key, private_key) values (p_public, p_private) on conflict (id) do nothing;
+  select k.public_key from private.alert_keys k;
+$$;
+
+-- Hands out up to 20 waiting alerts with their text and the phones to send them to. An alert that was
+-- handed out but not finished is handed out again after two minutes; after a day it is dropped.
+create or replace function public.claim_alerts() returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_badge int := (select count(*) from public.bookings b
+                  where b.source = 'website' and b.status = 'requested' and (b.hold_until is null or b.hold_until > now()));
+  v_alerts jsonb;
+begin
+  with picked as (
+    select a.id from private.alerts a
+    where a.sent_at is null and a.created_at > now() - interval '1 day'
+      and (a.claimed_at is null or a.claimed_at < now() - interval '2 minutes')
+    order by a.id limit 20
+    for update skip locked
+  ), claimed as (
+    update private.alerts a set claimed_at = now() from picked where a.id = picked.id
+    returning a.id, a.booking_id, a.endpoint
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', c.id,
+      'message', case when c.booking_id is null
+        then jsonb_build_object('title', 'Test alert', 'body', 'Alerts are working on this phone.', 'url', './', 'tag', 'test')
+        else jsonb_build_object('title', 'New request: ' || coalesce(cu.name, 'someone'),
+          'body', concat_ws(' · ', private.when_text(b.event_start, b.event_end),
+            private.item_names(array(select i.item_id from public.booking_items i where i.booking_id = b.id))),
+          'url', './?open=requests', 'tag', 'request-' || b.id)
+        end || jsonb_build_object('badge', v_badge),
+      'phones', coalesce((select jsonb_agg(jsonb_build_object('endpoint', p.endpoint, 'p256dh', p.p256dh, 'auth', p.auth))
+        from private.phones p join private.admins ad on ad.email = p.email
+        where (c.endpoint is null or p.endpoint = c.endpoint) and (c.booking_id is null or b.status = 'requested')), '[]'::jsonb)
+    ) order by c.id), '[]'::jsonb)
+  into v_alerts
+  from claimed c
+  left join public.bookings b on b.id = c.booking_id
+  left join public.customers cu on cu.id = b.customer_id;
+  return jsonb_build_object(
+    'keys', (select jsonb_build_object('public', k.public_key, 'private', k.private_key) from private.alert_keys k),
+    'alerts', v_alerts);
+end
+$$;
+
+create or replace function public.finish_alerts(p_sent bigint[], p_gone text[]) returns void
+language sql security definer set search_path = ''
+as $$
+  update private.alerts set sent_at = now() where id = any (p_sent);
+  delete from private.phones where endpoint = any (p_gone);
+$$;
+
+-- The calendar link: a long random code in the address is the only thing that opens it.
+create table if not exists private.calendar_link (
+  id boolean primary key default true check (id),
+  token text not null check (token ~ '^[a-f0-9]{64}$'),
+  created_at timestamptz not null default now()
+);
+alter table private.calendar_link enable row level security;
+
+create or replace function public.calendar_link(p_reset boolean default false) returns text
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not private.is_admin() then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  if p_reset then
+    delete from private.calendar_link;
+  end if;
+  insert into private.calendar_link (token) values (replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+  on conflict (id) do nothing;
+  return (select l.token from private.calendar_link l);
+end
+$$;
+revoke all on function public.calendar_link(boolean) from public, anon;
+grant execute on function public.calendar_link(boolean) to authenticated;
+
+-- Confirmed bookings and live holds from six months back to two years ahead, ready for a calendar file.
+create or replace function public.calendar_feed(p_token text) returns jsonb
+language sql stable security definer set search_path = ''
+as $$
+  select case when exists (select 1 from private.calendar_link l where l.token = p_token) then
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'uid', 'booking-' || b.id || '@bloom-events',
+        'start', to_char(b.event_start at time zone 'UTC', 'YYYYMMDD"T"HH24MISS"Z"'),
+        'end', to_char(b.event_end at time zone 'UTC', 'YYYYMMDD"T"HH24MISS"Z"'),
+        'status', case when b.status = 'confirmed' then 'CONFIRMED' else 'TENTATIVE' end,
+        'summary', case when b.status = 'requested' then 'On hold: ' else '' end || coalesce(c.name, 'Booking')
+          || coalesce(' · ' || private.item_names(array(select i.item_id from public.booking_items i where i.booking_id = b.id)), ''),
+        'location', coalesce(b.address, b.venue),
+        'description', concat_ws(E'\n',
+          'Setup from ' || private.clock(b.event_start - make_interval(mins => b.setup_minutes))
+            || ', pickup by ' || private.clock(b.event_end + make_interval(mins => b.pickup_minutes)),
+          case when b.address is not null and b.venue is not null then 'Venue: ' || b.venue end,
+          'Phone: ' || c.phone,
+          'Email: ' || c.email,
+          nullif(concat_ws(' · ', b.event_type, b.guests || ' guests'), ''),
+          'Price: ' || to_char(b.price, 'FM$999,999,990.00') || case when b.deposit_paid then ', deposit paid' else ', deposit not paid' end,
+          case when b.status = 'requested' then 'On hold'
+            || case when b.source = 'website' then ' (website request)' else '' end
+            || coalesce(' until ' || to_char(b.hold_until at time zone 'America/Detroit', 'Dy, Mon FMDD') || ', ' || private.clock(b.hold_until), '') end,
+          'Notes: ' || b.notes)
+      ) order by b.event_start, b.id)
+      from public.bookings b
+      left join public.customers c on c.id = b.customer_id
+      where b.status in ('requested', 'confirmed')
+        and (b.status <> 'requested' or b.hold_until is null or b.hold_until > now())
+        and b.event_end > now() - interval '180 days' and b.event_start < now() + interval '2 years'
+    ), '[]'::jsonb)
+  end
+$$;
+revoke all on function public.alert_public_key(), public.save_alert_keys(text, jsonb), public.claim_alerts(),
+  public.finish_alerts(bigint[], text[]), public.calendar_feed(text) from public, anon, authenticated;
+grant execute on function public.alert_public_key(), public.save_alert_keys(text, jsonb), public.claim_alerts(),
+  public.finish_alerts(bigint[], text[]), public.calendar_feed(text) to service_role;
+
 -- Version 1 kept one row per item per day in public.reservations. Move any rows into bookings as
 -- all-day events, then remove the old table.
 do $$
@@ -458,15 +734,20 @@ begin
 end
 $$;
 
--- Every 15 minutes, expire website holds that ran out. Skipped where pg_cron isn't available (local tests);
--- the functions above also expire stale holds before they save anything.
+-- Every 15 minutes, expire website holds that ran out, and every 5 minutes retry alerts that didn't go out.
+-- Skipped where pg_net or pg_cron isn't available (local tests); the functions above also expire stale
+-- holds before they save anything, and a new request asks for its alert right away.
 do $$
 begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    create extension if not exists pg_net with schema extensions;
+  end if;
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
     create extension if not exists pg_cron with schema pg_catalog;
     grant usage on schema cron to postgres;
     grant all privileges on all tables in schema cron to postgres;
     perform cron.schedule('bloom-expire-holds', '*/15 * * * *', 'select private.expire_holds()');
+    perform cron.schedule('bloom-send-alerts', '*/5 * * * *', 'select private.send_alerts()');
   end if;
 end
 $$;

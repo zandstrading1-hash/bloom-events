@@ -13,10 +13,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bloom">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=2">
+<link rel="stylesheet" href="app.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" integrity="sha384-WDvnzcla8X1CQM97EnYyl4OoTCvmMFp5lBiVNO3IjVdvLMOUjwt+iuYb/Mru5A9v" crossorigin="anonymous" defer></script>
 <script src="../site.js?v=20260926-times" defer></script>
-<script src="app.js?v=2" defer></script>
+<script src="app.js?v=3" defer></script>
 </head>
 <body>
 
@@ -89,6 +89,25 @@
         <h2>Put the app on your phone</h2>
         <p id="install-text">On iPhone, open this page in Safari, tap the Share button, then “Add to Home Screen”. On Android, open it in Chrome and choose “Install app”.</p>
         <button class="btn primary" type="button" id="install-button" hidden>Install app</button>
+      </div>
+      <div class="card stack" id="alerts-card">
+        <h2>Alerts on this phone</h2>
+        <p id="alerts-text">Get an alert on this phone the moment someone sends a booking request from the website.</p>
+        <div class="actions">
+          <button class="btn primary" type="button" id="alerts-on" hidden>Turn on alerts</button>
+          <button class="btn" type="button" id="alerts-test" hidden>Send a test alert</button>
+          <button class="btn" type="button" id="alerts-off" hidden>Turn off alerts</button>
+        </div>
+      </div>
+      <div class="card stack" id="calendar-card">
+        <h2>Bookings in your phone’s calendar</h2>
+        <p>Adds your confirmed bookings and holds to your phone’s Calendar app and keeps them up to date. On iPhone, tap “Add to my calendar”, then “Subscribe”.</p>
+        <div class="actions">
+          <button class="btn primary" type="button" id="calendar-add" disabled>Add to my calendar</button>
+          <button class="btn" type="button" id="calendar-copy" disabled>Copy the link</button>
+        </div>
+        <p>Anyone with the link can see your bookings, so keep it to yourself. If it gets shared by mistake, <button type="button" class="link" id="calendar-reset" disabled>make a new link</button>.</p>
+        <p class="status" id="calendar-status" role="status"></p>
       </div>
       <form class="card stack" id="settings-form" novalidate>
         <h2>Setup and pickup time</h2>
