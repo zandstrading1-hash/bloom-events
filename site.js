@@ -47,6 +47,9 @@
     if (count) count.textContent = filter === 'all' ? `${photos} photos · 2 films` : filter === 'videos' ? '2 films' : `${photos} photos`;
     document.querySelector('.portfolio-grid').hidden = photos === 0;
   }));
+  // A link such as gallery.html#neon opens with that filter chosen.
+  const linkedFilter = filters.find(b => location.hash === `#${b.dataset.filter}`);
+  if (linkedFilter) linkedFilter.click();
 
   const dialog = document.getElementById('lightbox');
   if (dialog && typeof dialog.showModal === 'function') {
