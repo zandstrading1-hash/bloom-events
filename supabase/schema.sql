@@ -199,6 +199,37 @@ drop policy if exists "Admins manage booking items" on public.booking_items;
 create policy "Admins manage booking items" on public.booking_items for all to authenticated
   using ((select private.is_admin())) with check ((select private.is_admin()));
 
+-- The price of a booking: its items at catalog prices, less each package's saving when the booking has all of
+-- that package's items (and a flower wall, for packages that include one). Packages don't share items: the
+-- biggest saving is counted first and uses up its items. Unknown ids are ignored, and nothing picked has no price.
+create or replace function public.booking_quote(p_items text[], p_packages text[] default '{}') returns numeric
+language plpgsql stable security invoker set search_path = ''
+as $$
+declare
+  v_pool text[] := array(select distinct i.id from public.items i where i.id = any (coalesce(p_items, '{}')));
+  v_total numeric := coalesce((select sum(i.price) from public.items i where i.id = any (v_pool)), 0);
+  v_wall text;
+  pk record;
+begin
+  if cardinality(v_pool) = 0 then
+    return null;
+  end if;
+  for pk in select * from public.packages p where p.id = any (coalesce(p_packages, '{}')) order by p.saving desc, p.sort loop
+    continue when not pk.parts <@ v_pool;
+    v_wall := null;
+    if pk.needs_wall then
+      select i.id into v_wall from public.items i where i.id = any (v_pool) and i.kind = 'wall' order by i.sort limit 1;
+      continue when v_wall is null;
+    end if;
+    v_pool := array(select x from unnest(v_pool) x where x <> all (pk.parts) and x is distinct from v_wall);
+    v_total := v_total - pk.saving;
+  end loop;
+  return greatest(v_total, 0);
+end
+$$;
+revoke all on function public.booking_quote(text[], text[]) from public;
+grant execute on function public.booking_quote(text[], text[]) to anon, authenticated;
+
 -- What the owner app reads. security_invoker keeps the tables' admin-only rules in force.
 create or replace view public.owner_bookings with (security_invoker = true) as
 select b.id, b.status, b.source, b.event_start, b.event_end,
@@ -208,7 +239,8 @@ select b.id, b.status, b.source, b.event_start, b.event_end,
   b.customer_id, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
   array(select i.item_id from public.booking_items i where i.booking_id = b.id order by i.item_id) as items,
   b.hold_until,
-  b.packages
+  b.packages,
+  public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages) as item_price
 from public.bookings b
 left join public.customers c on c.id = b.customer_id;
 
@@ -222,34 +254,6 @@ group by c.id;
 
 revoke all on public.owner_bookings, public.owner_customers from anon, authenticated;
 grant select on public.owner_bookings, public.owner_customers to authenticated;
-
--- The price of a booking: its items at catalog prices, less each package's saving when the booking has all of
--- that package's items (and a flower wall, for packages that include one). Packages don't share items: the
--- biggest saving is counted first and uses up its items. Unknown ids are ignored.
-create or replace function public.booking_quote(p_items text[], p_packages text[] default '{}') returns numeric
-language plpgsql stable security invoker set search_path = ''
-as $$
-declare
-  v_pool text[] := array(select distinct i.id from public.items i where i.id = any (coalesce(p_items, '{}')));
-  v_total numeric := coalesce((select sum(i.price) from public.items i where i.id = any (v_pool)), 0);
-  v_wall text;
-  pk record;
-begin
-  for pk in select * from public.packages p where p.id = any (coalesce(p_packages, '{}')) order by p.saving desc, p.sort loop
-    continue when not pk.parts <@ v_pool;
-    v_wall := null;
-    if pk.needs_wall then
-      select i.id into v_wall from public.items i where i.id = any (v_pool) and i.kind = 'wall' order by i.sort limit 1;
-      continue when v_wall is null;
-    end if;
-    v_pool := array(select x from unnest(v_pool) x where x <> all (pk.parts) and x is distinct from v_wall);
-    v_total := v_total - pk.saving;
-  end loop;
-  return v_total;
-end
-$$;
-revoke all on function public.booking_quote(text[], text[]) from public;
-grant execute on function public.booking_quote(text[], text[]) to anon, authenticated;
 
 -- Saves a booking with its customer and items in one step. Dates and times are Detroit wall-clock;
 -- an end time at or before the start time means the event ends the next day.
@@ -275,6 +279,10 @@ declare
 begin
   if not private.is_admin() then
     raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  -- An app opened before an update may not show every item, and saving would drop the ones it doesn't show.
+  if coalesce(nullif(b ->> 'form_version', '')::int, 1) < 2 then
+    raise exception 'This app is out of date. Close it fully and open it again.' using errcode = 'P0001';
   end if;
   perform private.expire_holds();
   if cardinality(v_items) = 0 then
@@ -821,10 +829,16 @@ begin
 end
 $$;
 
--- Bookings saved before prices were worked out automatically get their price from their items.
+-- Upcoming bookings saved before prices were worked out automatically get their price from their items. Website
+-- requests from then named their package only in the notes ("Package: ..."), so it's read from there first.
+update public.bookings b
+set packages = array(select p.id from public.packages p
+  where position(p.name in substring(b.notes from '(?:^|\n)Package: ([^\n]*)')) > 0 order by p.sort)
+where b.price is null and b.status in ('requested', 'confirmed') and b.event_end > now()
+  and b.source = 'website' and cardinality(b.packages) = 0 and b.notes ~ '(?:^|\n)Package: ';
 update public.bookings b
 set price = public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages)
-where b.price is null;
+where b.price is null and b.status in ('requested', 'confirmed') and b.event_end > now();
 
 -- Every 15 minutes, expire website holds that ran out, and every 5 minutes retry alerts that didn't go out.
 -- Skipped where pg_net or pg_cron isn't available (local tests); the functions above also expire stale

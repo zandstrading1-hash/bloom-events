@@ -146,7 +146,7 @@
     }
     showOnly('shell');
     $('account-email').textContent = session.email;
-    db('/rest/v1/packages?select=id,name,parts,needs_wall,saving&order=sort').then(renderPackages).catch(() => {});
+    loadPackages();
     db('/rest/v1/settings?select=setup_minutes,pickup_minutes,hold_hours').then(rows => {
       if (rows && rows[0]) settings = rows[0];
       $('setting-setup').value = settings.setup_minutes;
@@ -394,25 +394,30 @@
   const f = id => $(`f-${id}`);
   let editing = null;
   let pickedCustomer = null;
-  const GROUPS = [['Flower walls', id => id.endsWith('-wall')], ['Neon signs', id => id.startsWith('neon-')], ['Extras', id => !id.endsWith('-wall') && !id.startsWith('neon-')]];
-  f('items').replaceChildren(...GROUPS.map(([title, inGroup]) => el('div', { class: 'item-group' },
-    el('p', { class: 'item-group-title', text: title }),
+  const GROUPS = [['walls', 'Flower walls', id => id.endsWith('-wall')], ['neon', 'Neon signs', id => id.startsWith('neon-')], ['extras', 'Extras', id => !id.endsWith('-wall') && !id.startsWith('neon-')]];
+  f('items').replaceChildren(...GROUPS.map(([key, title, inGroup]) => el('div', { class: 'item-group', role: 'group', 'aria-labelledby': `group-${key}` },
+    el('p', { class: 'item-group-title', id: `group-${key}`, text: title }),
     el('ul', { class: 'items' }, ITEMS.filter(inGroup).map(id => el('li', {}, el('label', {},
       el('input', { type: 'checkbox', name: 'items', value: id }), el('span', { text: itemName(id) }), el('small', { class: 'taken' }))))))));
   const boxes = () => [...form.querySelectorAll('[name="items"]')];
   const packageBoxes = () => [...form.querySelectorAll('[name="packages"]')];
   const chosen = list => list.filter(box => box.checked).map(box => box.value);
-  // Packages come from the database with their savings; the price uses the same list.
+  // Packages come from the database with their savings; the price uses the same list. Until the list has
+  // loaded, a booking keeps the packages it has.
+  let packagesLoaded = false;
+  const packagesChosen = () => packagesLoaded ? chosen(packageBoxes()) : (editing && editing.packages) || [];
   const renderPackages = list => {
     $('f-packages').replaceChildren(...list.map(p => el('li', {}, el('label', {},
       el('input', { type: 'checkbox', name: 'packages', value: p.id, checked: Boolean(editing && (editing.packages || []).includes(p.id)) }),
       el('span', {}, p.name, el('small', { class: 'sub', text: `Save ${money(p.saving)} with ${listNames([...(p.needs_wall ? ['a flower wall'] : []), ...p.parts.map(itemName)])}` }))))));
     $('f-packages-group').hidden = !list.length;
+    packagesLoaded = true;
   };
+  const loadPackages = () => db('/rest/v1/packages?select=id,name,parts,needs_wall,saving&order=sort').then(renderPackages).catch(() => {});
 
-  /* Price: worked out from the items and package by the database, unless she types her own. */
+  /* Price: worked out from the items and package by the database, unless she types her own. A worked-out
+     price is saved empty, so the database prices exactly what is saved. */
   let priceAuto = true;
-  let priceToCheck = null;
   let itemPrice = null;
   let quoteId = 0;
   const paintPrice = () => {
@@ -425,17 +430,16 @@
   const updatePrice = debounce(async () => {
     const id = ++quoteId;
     try {
-      const total = Number(await rpc('booking_quote', { p_items: chosen(boxes()), p_packages: chosen(packageBoxes()) }));
+      const total = Number(await rpc('booking_quote', { p_items: chosen(boxes()), p_packages: packagesChosen() }));
       if (id !== quoteId) return;
       itemPrice = total;
-      // An existing booking keeps working its price out only if it still matches the items.
-      if (priceToCheck !== null) { priceAuto = Number(priceToCheck) === total; priceToCheck = null; }
       if (priceAuto) f('price').value = total ? total.toFixed(2) : '';
       paintPrice();
     } catch { /* a price left empty is worked out when the booking is saved */ }
   }, 200);
-  f('price').addEventListener('input', () => { priceAuto = f('price').value === ''; priceToCheck = null; paintPrice(); });
-  form.addEventListener('change', e => { if (e.target.name === 'items' || e.target.name === 'packages') updatePrice(); });
+  f('price').addEventListener('input', () => { priceAuto = f('price').value === ''; paintPrice(); });
+  f('price').addEventListener('change', () => { if (priceAuto && itemPrice) f('price').value = itemPrice.toFixed(2); });
+  form.addEventListener('change', e => { if (e.target.name === 'items' || e.target.name === 'packages') { quoteId++; updatePrice(); } });
 
   const pick = customer => {
     pickedCustomer = customer && customer.id ? customer : null;
@@ -479,12 +483,13 @@
     f('venue').value = (row && row.venue) || '';
     f('type').value = (row && row.event_type) || '';
     f('guests').value = (row && row.guests) || '';
-    f('price').value = row && row.price != null ? Number(row.price).toFixed(2) : '';
-    priceAuto = !row || row.price == null;
-    priceToCheck = row && row.price != null ? row.price : null;
-    itemPrice = null;
+    // A saved price that matches its items and package stays worked out; any other is her own.
+    itemPrice = row && row.item_price != null ? Number(row.item_price) : null;
+    priceAuto = !row || row.price == null || Number(row.price) === itemPrice;
+    f('price').value = row && !priceAuto ? Number(row.price).toFixed(2) : itemPrice ? itemPrice.toFixed(2) : '';
+    quoteId++;
     paintPrice();
-    updatePrice();
+    if (!packagesLoaded) loadPackages();
     f('deposit').checked = Boolean(row && row.deposit_paid);
     f('status').querySelectorAll('[data-other]').forEach(option => option.remove());
     if (row && !['confirmed', 'requested', 'cancelled'].includes(row.status)) f('status').append(el('option', { value: row.status, 'data-other': true, text: STATUS[row.status] || row.status }));
@@ -550,7 +555,8 @@
         setup_minutes: f('setup').value, pickup_minutes: f('pickup').value,
         items,
         address: f('address').value, venue: f('venue').value, event_type: f('type').value, guests: f('guests').value,
-        price: f('price').value, packages: chosen(packageBoxes()), deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value
+        price: priceAuto ? '' : f('price').value, packages: packagesChosen(), deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value,
+        form_version: 2
       } });
       close(formDialog);
       toast(editing ? 'Booking updated' : 'Booking saved');

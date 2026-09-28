@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="app.css?v=5">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js" integrity="sha384-WDvnzcla8X1CQM97EnYyl4OoTCvmMFp5lBiVNO3IjVdvLMOUjwt+iuYb/Mru5A9v" crossorigin="anonymous" defer></script>
 <script src="../site.js?v=20260928-prices" defer></script>
-<script src="app.js?v=4" defer></script>
+<script src="app.js?v=5" defer></script>
 </head>
 <body>
 
@@ -175,7 +175,7 @@
     <fieldset class="stack">
       <legend>Items *</legend>
       <div class="item-groups" id="f-items"></div>
-      <div class="item-group" id="f-packages-group" hidden><p class="item-group-title">Package</p><ul class="items" id="f-packages"></ul></div>
+      <div class="item-group" id="f-packages-group" role="group" aria-labelledby="group-packages" hidden><p class="item-group-title" id="group-packages">Package</p><ul class="items" id="f-packages"></ul></div>
     </fieldset>
     <fieldset class="stack">
       <legend>Event</legend>
@@ -188,7 +188,7 @@
     </fieldset>
     <fieldset class="stack">
       <legend>Money and status</legend>
-      <label class="field">Price ($)<input type="number" id="f-price" min="0" step="0.01" inputmode="decimal"></label>
+      <label class="field">Price ($)<input type="number" id="f-price" min="0" step="0.01" inputmode="decimal" aria-describedby="price-hint"></label>
       <p class="hint" id="price-hint"></p>
       <label class="field">Status<select id="f-status"><option value="confirmed">Confirmed</option><option value="requested">On hold (not confirmed)</option><option value="cancelled">Cancelled</option></select></label>
       <label class="check"><input type="checkbox" id="f-deposit"> Deposit paid</label>
