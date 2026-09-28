@@ -875,3 +875,23 @@ a[href^="tel:"] { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   nav, .book-bar, .book-bar.is-away { transition: none; }
 }
+
+/* ============ Home: every flower wall together ============ */
+.wall-collection { background: var(--surface); border-bottom: 1px solid var(--line); }
+.wall-grid { list-style: none; margin: 2.25rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2rem 1.25rem; }
+.wall-grid a { display: grid; gap: .35rem; color: var(--ink); text-decoration: none; }
+.wall-grid img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; margin-bottom: .45rem; border-radius: 6px; background: #f7f7f5; transition: transform .5s ease; }
+.wall-grid a:hover img, .wall-grid a:focus-visible img { transform: scale(1.02); }
+.wall-grid-name { font: 400 1.2rem/1.25 var(--heading); letter-spacing: -.02em; }
+.wall-grid-note { font-size: .875rem; line-height: 1.45; color: var(--ink-muted); }
+.wall-grid-more .wall-grid-name { color: var(--rose); }
+@media (max-width: 960px) {
+  .wall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6rem 1rem; }
+}
+@media (max-width: 700px) {
+  .wall-collection { padding-block: 3.25rem; }
+  .wall-grid { margin-top: 1.75rem; }
+  .wall-grid-name { font-size: 1.1rem; }
+  .wall-grid-note { font-size: .8125rem; }
+}
+@media (prefers-reduced-motion: reduce) { .wall-grid img { transition: none; } }
