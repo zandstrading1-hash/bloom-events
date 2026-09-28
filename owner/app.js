@@ -146,6 +146,7 @@
     }
     showOnly('shell');
     $('account-email').textContent = session.email;
+    db('/rest/v1/packages?select=id,name,parts,needs_wall,saving&order=sort').then(renderPackages).catch(() => {});
     db('/rest/v1/settings?select=setup_minutes,pickup_minutes,hold_hours').then(rows => {
       if (rows && rows[0]) settings = rows[0];
       $('setting-setup').value = settings.setup_minutes;
@@ -340,6 +341,7 @@
       fact('When', whenText(row)),
       fact('Setup and pickup', `Setup from ${timeText(shift(row.start_local, -row.setup_minutes))}, pickup by ${timeText(shift(row.end_local, row.pickup_minutes))}`),
       fact('Items', itemList(row.items)),
+      row.packages && row.packages.length > 0 && fact('Package', listNames(row.packages.map(itemName))),
       row.address && fact('Address', el('a', { href: `https://maps.apple.com/?q=${encodeURIComponent(row.address)}`, target: '_blank', rel: 'noopener', text: row.address })),
       row.venue && fact('Venue', row.venue),
       (row.event_type || row.guests) && fact('Event', [row.event_type, row.guests && `${row.guests} guests`].filter(Boolean).join(' · ')),
@@ -392,9 +394,48 @@
   const f = id => $(`f-${id}`);
   let editing = null;
   let pickedCustomer = null;
-  f('items').replaceChildren(...ITEMS.map(id => el('li', {}, el('label', {},
-    el('input', { type: 'checkbox', name: 'items', value: id }), el('span', { text: itemName(id) }), el('small', { class: 'taken' })))));
+  const GROUPS = [['Flower walls', id => id.endsWith('-wall')], ['Neon signs', id => id.startsWith('neon-')], ['Extras', id => !id.endsWith('-wall') && !id.startsWith('neon-')]];
+  f('items').replaceChildren(...GROUPS.map(([title, inGroup]) => el('div', { class: 'item-group' },
+    el('p', { class: 'item-group-title', text: title }),
+    el('ul', { class: 'items' }, ITEMS.filter(inGroup).map(id => el('li', {}, el('label', {},
+      el('input', { type: 'checkbox', name: 'items', value: id }), el('span', { text: itemName(id) }), el('small', { class: 'taken' }))))))));
   const boxes = () => [...form.querySelectorAll('[name="items"]')];
+  const packageBoxes = () => [...form.querySelectorAll('[name="packages"]')];
+  const chosen = list => list.filter(box => box.checked).map(box => box.value);
+  // Packages come from the database with their savings; the price uses the same list.
+  const renderPackages = list => {
+    $('f-packages').replaceChildren(...list.map(p => el('li', {}, el('label', {},
+      el('input', { type: 'checkbox', name: 'packages', value: p.id, checked: Boolean(editing && (editing.packages || []).includes(p.id)) }),
+      el('span', {}, p.name, el('small', { class: 'sub', text: `Save ${money(p.saving)} with ${listNames([...(p.needs_wall ? ['a flower wall'] : []), ...p.parts.map(itemName)])}` }))))));
+    $('f-packages-group').hidden = !list.length;
+  };
+
+  /* Price: worked out from the items and package by the database, unless she types her own. */
+  let priceAuto = true;
+  let priceToCheck = null;
+  let itemPrice = null;
+  let quoteId = 0;
+  const paintPrice = () => {
+    const hint = $('price-hint');
+    if (itemPrice === null) hint.replaceChildren();
+    else if (priceAuto) hint.replaceChildren(itemPrice ? 'Worked out from the items and package. Change it for extras or a different deal.' : 'Fills in as you choose items.');
+    else hint.replaceChildren('Your own price. ', el('button', { type: 'button', class: 'link', text: `Use the item prices (${money(itemPrice)})`,
+      onclick: () => { priceAuto = true; f('price').value = itemPrice ? itemPrice.toFixed(2) : ''; paintPrice(); } }));
+  };
+  const updatePrice = debounce(async () => {
+    const id = ++quoteId;
+    try {
+      const total = Number(await rpc('booking_quote', { p_items: chosen(boxes()), p_packages: chosen(packageBoxes()) }));
+      if (id !== quoteId) return;
+      itemPrice = total;
+      // An existing booking keeps working its price out only if it still matches the items.
+      if (priceToCheck !== null) { priceAuto = Number(priceToCheck) === total; priceToCheck = null; }
+      if (priceAuto) f('price').value = total ? total.toFixed(2) : '';
+      paintPrice();
+    } catch { /* a price left empty is worked out when the booking is saved */ }
+  }, 200);
+  f('price').addEventListener('input', () => { priceAuto = f('price').value === ''; priceToCheck = null; paintPrice(); });
+  form.addEventListener('change', e => { if (e.target.name === 'items' || e.target.name === 'packages') updatePrice(); });
 
   const pick = customer => {
     pickedCustomer = customer && customer.id ? customer : null;
@@ -433,11 +474,17 @@
     f('setup').value = row ? row.setup_minutes : settings.setup_minutes;
     f('pickup').value = row ? row.pickup_minutes : settings.pickup_minutes;
     boxes().forEach(box => { box.checked = Boolean(row && row.items.includes(box.value)); });
+    packageBoxes().forEach(box => { box.checked = Boolean(row && (row.packages || []).includes(box.value)); });
     f('address').value = (row && row.address) || '';
     f('venue').value = (row && row.venue) || '';
     f('type').value = (row && row.event_type) || '';
     f('guests').value = (row && row.guests) || '';
-    f('price').value = row && row.price != null ? row.price : '';
+    f('price').value = row && row.price != null ? Number(row.price).toFixed(2) : '';
+    priceAuto = !row || row.price == null;
+    priceToCheck = row && row.price != null ? row.price : null;
+    itemPrice = null;
+    paintPrice();
+    updatePrice();
     f('deposit').checked = Boolean(row && row.deposit_paid);
     f('status').querySelectorAll('[data-other]').forEach(option => option.remove());
     if (row && !['confirmed', 'requested', 'cancelled'].includes(row.status)) f('status').append(el('option', { value: row.status, 'data-other': true, text: STATUS[row.status] || row.status }));
@@ -503,7 +550,7 @@
         setup_minutes: f('setup').value, pickup_minutes: f('pickup').value,
         items,
         address: f('address').value, venue: f('venue').value, event_type: f('type').value, guests: f('guests').value,
-        price: f('price').value, deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value
+        price: f('price').value, packages: chosen(packageBoxes()), deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value
       } });
       close(formDialog);
       toast(editing ? 'Booking updated' : 'Booking saved');
@@ -526,7 +573,7 @@
     el('span', {},
       el('span', { class: 'line1' }, row.customer_name || 'No name', badge(row.status)),
       el('span', { class: 'sub', text: whenText(row) }),
-      el('span', { class: 'sub', text: itemList(row.items) }),
+      el('span', { class: 'sub', text: [itemList(row.items), row.price != null && money(row.price)].filter(Boolean).join(' · ') }),
       row.address && el('span', { class: 'sub', text: row.address }),
       row.status === 'requested' && row.source === 'website' && el('span', { class: 'sub request', text: `Website request${row.hold_until ? ` · holding until ${instantText(row.hold_until)}` : ''}` }))));
   const loadBookings = async reset => {

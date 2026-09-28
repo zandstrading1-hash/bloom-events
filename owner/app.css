@@ -119,6 +119,10 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 .finds { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .3rem; }
 .finds button { width: 100%; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.item-groups { display: grid; gap: .9rem; }
+.item-group-title { margin: 0 0 .35rem; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.items label .sub { display: block; font-size: .8rem; color: var(--muted); }
+#price-hint:empty { display: none; }
 .items label { display: flex; align-items: center; gap: .7rem; min-height: 48px; padding: .45rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
 .items input { width: 1.25rem; height: 1.25rem; min-height: 0; flex: none; accent-color: var(--rose); }
 .items .taken { margin-left: auto; font-size: .8rem; color: #b3261e; text-align: right; }

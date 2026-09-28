@@ -12,12 +12,14 @@ const now = new Date();
 const D = iso(new Date(now.getFullYear(), now.getMonth() + 1, 15)); // ivory wall + bloom bar held 12 PM to 11 PM
 const F = iso(new Date(now.getFullYear(), now.getMonth() + 1, 20)); // every wall held 10 AM to 8 PM
 const G = iso(new Date(now.getFullYear(), now.getMonth() + 1, 22)); // sweets cart held 6 AM to 10 AM
+const H = iso(new Date(now.getFullYear(), now.getMonth() + 1, 25)); // Engaged neon sign held 10 AM to 2 PM
 const WALLS = ['ivory-wall', 'garden-wall', 'pink-ombre-wall', 'red-rose-wall', 'champagne-wall', 'greenery-wall', 'ivory-texture-wall'];
 const HOLDS = [
   { item_id: 'ivory-wall', busy_from: `${D}T12:00:00`, busy_until: `${D}T23:00:00` },
   { item_id: 'bloom-bar', busy_from: `${D}T12:00:00`, busy_until: `${D}T23:00:00` },
   ...WALLS.map(item_id => ({ item_id, busy_from: `${F}T10:00:00`, busy_until: `${F}T20:00:00` })),
-  { item_id: 'sweets-cart', busy_from: `${G}T06:00:00`, busy_until: `${G}T10:00:00` }
+  { item_id: 'sweets-cart', busy_from: `${G}T06:00:00`, busy_until: `${G}T10:00:00` },
+  { item_id: 'neon-engaged', busy_from: `${H}T10:00:00`, busy_until: `${H}T14:00:00` }
 ];
 const w = s => Date.parse(`${s}Z`);
 const addDay = day => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
@@ -117,6 +119,16 @@ const requests = s => s.log.filter(l => l.path.endsWith('/rpc/request_booking'))
   assert(!(await disabled('ivory-wall')), 'choosing a free day unblocks items');
   await p.click('#date-clear');
   assert(await p.textContent('#date-status') === '' && await p.isHidden('#time-pick'), 'Clear date resets the check');
+  // Neon signs are held like the walls.
+  await p.click(`[data-date="${H}"]`);
+  await p.selectOption('#pick-start', '11:00');
+  await p.selectOption('#pick-end', '12:00');
+  await p.waitForFunction(() => document.getElementById('date-status').textContent.includes('11 AM to 12 PM: 1 item is booked at that time'));
+  assert(await p.isDisabled('[data-pick="neon-engaged"]') && await p.$eval('[data-pick-card="neon-engaged"]', el => el.classList.contains('is-booked'))
+    && (await p.textContent('[data-pick="neon-engaged"] .neon-pick-label')).includes('Booked'), 'a neon sign booked at that time is marked Booked and can’t be picked');
+  assert((await p.textContent('[data-pick-card="neon-engaged"] .pick-note')).trim() === 'Taken 10 AM–2 PM' && !(await p.isDisabled('[data-pick="neon-oh-baby"]')),
+    'it says when it’s taken, and the other signs stay free');
+  await p.click('#date-clear');
   assert(!errors.length, 'no page errors: ' + errors.join('; '));
   await ctx.close();
 

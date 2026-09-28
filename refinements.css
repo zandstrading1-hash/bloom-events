@@ -916,3 +916,26 @@ a[href^="tel:"] { white-space: nowrap; }
 /* Gallery filters: five on one line on narrow phones, and the row never wider than its space. */
 @media (max-width: 700px) { .gallery-filters { min-width: 0; max-width: 100%; } }
 @media (max-width: 420px) { .gallery-filters { gap: .3rem; } .gallery-filter { padding: .5rem .62rem; font-size: .8rem; } }
+
+/* ============ Rentals: tap a neon sign to add it (picked, booked and taken times over the photo) ============ */
+.neon-card { position: relative; }
+.neon-pick { position: relative; display: block; width: 100%; padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; overflow: hidden; }
+.neon-pick:focus-visible { outline: 3px solid var(--rose); outline-offset: 3px; }
+.neon-pick-label { position: absolute; left: 50%; bottom: .6rem; transform: translateX(-50%); padding: .3rem .85rem; border-radius: 999px; background: rgba(255, 253, 252, .94); color: var(--rose); font: 500 .8125rem Arial, Helvetica, sans-serif; white-space: nowrap; }
+.neon-pick .pick-added, .neon-pick .pick-booked { display: none; }
+.neon-pick[aria-pressed="true"] .pick-add { display: none; }
+.neon-pick[aria-pressed="true"] .pick-added { display: inline; }
+.neon-pick[aria-pressed="true"] .neon-pick-label { background: var(--rose); color: #fff; }
+.neon-card.is-picked .neon-pick { box-shadow: inset 0 0 0 3px var(--rose); }
+.neon-card.is-picked::after { content: "✓"; position: absolute; top: .45rem; right: .45rem; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 50%; background: var(--rose); color: #fff; font-size: .85rem; pointer-events: none; }
+.neon-pick.is-booked .pick-add, .neon-pick.is-booked .pick-added { display: none; }
+.neon-pick.is-booked .pick-booked { display: inline; }
+.neon-pick.is-booked .neon-pick-label { background: var(--ink); color: #fff; }
+.neon-pick:disabled { cursor: not-allowed; }
+.neon-card.is-booked img { filter: grayscale(.5); opacity: .55; }
+.neon-card .pick-note { position: absolute; z-index: 1; top: .4rem; left: .4rem; right: .4rem; margin: 0; padding: .2rem .35rem; border-radius: 6px; background: rgba(255, 253, 252, .94); font-size: .75rem; line-height: 1.3; text-align: center; pointer-events: none; }
+.neon-card.is-picked .pick-note { right: 2.3rem; }
+@media (max-width: 700px) {
+  .neon-pick-label { bottom: .4rem; padding: .22rem .6rem; font-size: .75rem; }
+  .neon-card .pick-note { font-size: .6875rem; }
+}
