@@ -171,6 +171,15 @@
     'bloom-bar': 'Bloom bar',
     'pedestals': 'White pedestals',
     'sweets-cart': 'Sweets cart',
+    'neon-mr-and-mrs': 'Mr. & Mrs. neon sign',
+    'neon-happy-birthday': 'Happy Birthday neon sign',
+    'neon-christening-day': 'Christening Day neon sign',
+    'neon-congratulations': 'Congratulations neon sign',
+    'neon-oh-baby': 'Oh Baby neon sign',
+    'neon-better-together': 'Better Together neon sign',
+    'neon-just-married': 'Just Married neon sign',
+    'neon-engaged': 'Engaged neon sign',
+    'neon-congrats': 'Congrats neon sign',
     'pkg-sweet-setup': 'The Sweet Setup package',
     'pkg-bridal-suite': 'The Bridal Suite package',
     'pkg-full-bloom': 'The Full Bloom package'
@@ -607,6 +616,7 @@
         name: value('name'), email: value('email'), phone: value('phone'),
         date: value('event_date'), start: value('event_start'), end: value('event_end'), items,
         event_type: value('event_type'), guests: value('guests'), venue: value('venue'), address: value('address'),
+        packages: picks.filter(id => PARTS[id]),
         notes: [packages.length && `Package: ${packages.join(', ')}`, value('message')].filter(Boolean).join('\n'),
         trap: value('botcheck')
       } }, 15000);

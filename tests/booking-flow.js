@@ -75,6 +75,28 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   await p2.goto(BASE + '/contact.html?picks=red-rose-wall,red-rose-wall,not-a-wall', { waitUntil: 'networkidle' });
   const items2 = await p2.$$eval('#picks-list li span', els => els.map(e => e.textContent));
   assert(items2.filter(t => t === 'Red rose wall').length === 1 && !items2.some(t => /not-a-wall/.test(t)), 'link picks deduped, unknown ignored: ' + items2);
+  // neon signs are picked like the walls, and a package request says which package it is
+  const q = await ctx.newPage();
+  await q.goto(BASE + '/services.html', { waitUntil: 'networkidle' });
+  await q.evaluate(() => localStorage.removeItem('bloom-picks'));
+  await q.reload({ waitUntil: 'networkidle' });
+  await q.click('[data-pick="neon-oh-baby"]');
+  assert(await q.getAttribute('[data-pick="neon-oh-baby"]', 'aria-pressed') === 'true' && await q.$eval('[data-pick-card="neon-oh-baby"]', el => el.classList.contains('is-picked')),
+    'a neon sign can be picked like a wall');
+  await q.click('[data-pick="pkg-sweet-setup"]');
+  await q.click('[data-pick="garden-wall"]');
+  await q.goto(BASE + '/contact.html', { waitUntil: 'networkidle' });
+  const neonItems = await q.$$eval('#picks-list li span', els => els.map(e => e.textContent));
+  assert(neonItems.includes('Oh Baby neon sign') && neonItems.includes('The Sweet Setup package'), 'the Book page lists the neon sign and package: ' + neonItems);
+  await q.fill('#name', 'Neon Person'); await q.fill('#email', 'neon@example.com');
+  await q.fill('#event_date', '2027-07-10'); await q.selectOption('#event_start', '14:00'); await q.selectOption('#event_end', '18:00');
+  const sentBefore = sent.length;
+  await q.click('.form-submit');
+  await q.waitForFunction(() => document.getElementById('form-status').classList.contains('success'));
+  const nr = sent[sentBefore] || {};
+  assert(['neon-oh-baby', 'bloom-bar', 'sweets-cart', 'garden-wall'].every(i => (nr.items || []).includes(i)) && JSON.stringify(nr.packages) === '["pkg-sweet-setup"]',
+    'the request holds the neon sign and the package’s items, and names the package: ' + JSON.stringify({ items: nr.items, packages: nr.packages }));
+  await q.close();
   // phones: the header tucks away while reading down and comes back on the way up; the Book button stays off
   // the first screen and steps aside where the page has its own Book button and over the footer
   const m = await b.newPage({ viewport: { width: 390, height: 844 } });

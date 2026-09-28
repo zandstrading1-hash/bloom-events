@@ -23,6 +23,29 @@ const TOKEN = jwt('owner@example.com');
 // The public key phones subscribe with: a real P-256 point, as the edge function hands out.
 const ALERT_KEY = crypto.createECDH('prime256v1').generateKeys().toString('base64url');
 
+// Catalog prices and packages as in supabase/schema.sql, and the same pricing rule as booking_quote().
+const PRICES = { 'ivory-wall': 450, 'garden-wall': 450, 'pink-ombre-wall': 450, 'red-rose-wall': 450, 'champagne-wall': 450, 'greenery-wall': 450, 'ivory-texture-wall': 450,
+  'bloom-bar': 350, 'pedestals': 275, 'sweets-cart': 325 };
+['mr-and-mrs', 'happy-birthday', 'christening-day', 'congratulations', 'oh-baby', 'better-together', 'just-married', 'engaged', 'congrats'].forEach(s => { PRICES[`neon-${s}`] = 125; });
+const PACKAGES = [
+  { id: 'pkg-sweet-setup', name: 'The Sweet Setup package', parts: ['bloom-bar', 'sweets-cart'], needs_wall: false, saving: 75 },
+  { id: 'pkg-bridal-suite', name: 'The Bridal Suite package', parts: ['bloom-bar'], needs_wall: true, saving: 80 },
+  { id: 'pkg-full-bloom', name: 'The Full Bloom package', parts: ['bloom-bar', 'pedestals', 'sweets-cart'], needs_wall: true, saving: 150 }
+];
+const quote = (items, packages = []) => {
+  let pool = [...new Set(items)].filter(i => i in PRICES);
+  if (!pool.length) return null;
+  let total = pool.reduce((sum, i) => sum + PRICES[i], 0);
+  for (const pk of PACKAGES.filter(p => packages.includes(p.id)).sort((a, b) => b.saving - a.saving)) {
+    if (!pk.parts.every(i => pool.includes(i))) continue;
+    const wall = pk.needs_wall ? Object.keys(PRICES).find(i => i.endsWith('-wall') && pool.includes(i)) : null;
+    if (pk.needs_wall && !wall) continue;
+    pool = pool.filter(i => !pk.parts.includes(i) && i !== wall);
+    total -= pk.saving;
+  }
+  return Math.max(total, 0);
+};
+
 // A small in-memory stand-in for the Supabase API, with the same rules as supabase/schema.sql.
 const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } = {}) => {
   const s = {
@@ -40,6 +63,8 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
     phones: new Map(),
     tests: [],
     calendarToken: null,
+    quoteDelay: 0,
+    packagesFail: false,
     log: [],
     next: 100
   };
@@ -47,7 +72,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   const isActive = b => b.status === 'requested' || b.status === 'confirmed';
   const held = b => [w(b.start_local) - b.setup_minutes * 60000, w(b.end_local) + b.pickup_minutes * 60000];
   const overlap = (a, b) => a[0] < b[1] && b[0] < a[1];
-  const bookingView = b => { const c = s.customers.find(x => x.id === b.customer_id) || {}; return { source: 'owner', created_at: '2026-09-01T12:00:00Z', hold_until: null, ...b, customer_name: c.name ?? null, customer_phone: c.phone ?? null, customer_email: c.email ?? null, items: [...b.items].sort() }; };
+  const bookingView = b => { const c = s.customers.find(x => x.id === b.customer_id) || {}; return { source: 'owner', created_at: '2026-09-01T12:00:00Z', hold_until: null, packages: [], ...b, customer_name: c.name ?? null, customer_phone: c.phone ?? null, customer_email: c.email ?? null, items: [...b.items].sort(), item_price: quote(b.items, b.packages || []) }; };
   const customerView = c => { const mine = s.bookings.filter(b => b.customer_id === c.id && isActive(b)); return { ...c, booking_count: mine.length, latest_event_local: mine.map(b => b.start_local).sort().pop() || null }; };
   const proposed = ({ date, start, end, setup, pickup }) => {
     const startLocal = `${date}T${start}:00`;
@@ -109,6 +134,8 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
     if (auth !== `Bearer ${TOKEN}` && auth !== 'Bearer token-2') return json(route, 401, { message: 'JWT expired' });
     if (path === '/auth/v1/user') return json(route, 200, { email: 'owner@example.com' });
     if (path === '/rest/v1/rpc/am_i_admin') return json(route, 200, admin);
+    if (path === '/rest/v1/rpc/booking_quote') { if (s.quoteDelay) await new Promise(r => setTimeout(r, s.quoteDelay)); return json(route, 200, quote(body.p_items, body.p_packages)); }
+    if (path === '/rest/v1/packages') return s.packagesFail ? json(route, 503, { message: 'Service unavailable' }) : json(route, 200, PACKAGES);
     if (path === '/rest/v1/rpc/save_phone') { s.phones.set(body.p_endpoint, body); return route.fulfill({ status: 204 }); }
     if (path === '/rest/v1/rpc/remove_phone') { s.phones.delete(body.p_endpoint); return route.fulfill({ status: 204 }); }
     if (path === '/rest/v1/rpc/test_phone_alert') { s.tests.push(body.p_endpoint); return json(route, 200, s.phones.has(body.p_endpoint)); }
@@ -119,6 +146,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
     }
     if (path === '/rest/v1/rpc/save_booking') {
       const b = body.b;
+      if ((Number(b.form_version) || 1) < 2) return json(route, 400, { code: 'P0001', message: 'This app is out of date. Close it fully and open it again.' });
       const p = proposed({ date: b.date, start: b.start, end: b.end, setup: Number(b.setup_minutes), pickup: Number(b.pickup_minutes) });
       const taken = [...new Set([...conflicts(p, b.id).flatMap(x => x.items), ...s.raceItems])].filter(i => b.items.includes(i));
       if (['requested', 'confirmed'].includes(b.status) && taken.length) return json(route, 409, { code: '23P01', message: 'Already booked at that time', details: taken.join(',') });
@@ -126,7 +154,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
       const fields = { name: b.customer_name.trim(), phone: b.customer_phone.trim() || null, email: b.customer_email.trim().toLowerCase() || null };
       if (customerId) Object.assign(s.customers.find(c => c.id === customerId), fields);
       else { customerId = s.next++; s.customers.push({ id: customerId, ...fields, notes: null, created_at: new Date().toISOString() }); }
-      const row = { customer_id: customerId, status: b.status, start_local: p.startLocal, end_local: p.endLocal, setup_minutes: Number(b.setup_minutes), pickup_minutes: Number(b.pickup_minutes), address: b.address || null, venue: b.venue || null, event_type: b.event_type || null, guests: b.guests ? Number(b.guests) : null, price: b.price === '' ? null : Number(b.price), deposit_paid: b.deposit_paid, notes: b.notes || null, items: b.items };
+      const row = { customer_id: customerId, status: b.status, start_local: p.startLocal, end_local: p.endLocal, setup_minutes: Number(b.setup_minutes), pickup_minutes: Number(b.pickup_minutes), address: b.address || null, venue: b.venue || null, event_type: b.event_type || null, guests: b.guests ? Number(b.guests) : null, price: b.price === '' ? quote(b.items, b.packages || []) : Number(b.price), packages: b.packages || [], deposit_paid: b.deposit_paid, notes: b.notes || null, items: b.items };
       if (b.id) Object.assign(s.bookings.find(x => x.id === b.id), row); else s.bookings.push({ id: s.next++, ...row });
       return json(route, 200, b.id || s.next - 1);
     }
@@ -441,6 +469,8 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.waitForFunction(() => document.getElementById('toast').textContent === 'Request declined');
   assert(s.log.filter(l => l.method === 'PATCH' && l.path === '/rest/v1/bookings').pop().body.status === 'declined', 'declining saves it as declined');
   await p.waitForFunction(() => document.getElementById('tab-requests').textContent === '1');
+  // The badge and the list reload separately; Decline all follows the list.
+  await p.waitForFunction(() => document.querySelectorAll('#booking-list li').length === 1);
   assert(await p.isHidden('#decline-all'), 'Decline all only shows when there’s more than one');
   await p.click('[data-list="upcoming"]');
   await p.click('[data-list="requests"]');
@@ -623,6 +653,122 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [] } 
   await p.click('#calendar-add');
   assert(await until(() => google.length > 0) && new URL(google[0]).searchParams.get('cid') === `webcal://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/calendar/${s.calendarToken}.ics`,
     `on Android, Add to my calendar opens Google Calendar with the link: ${google[0]}`);
+  await ctx.close();
+
+  /* Prices: worked out from the items and package, her own price kept, shown in the lists and details */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  s = await fakeSupabase(ctx);
+  await ctx.addInitScript(signedIn, TOKEN);
+  p = await ctx.newPage();
+  const priceErrors = [];
+  p.on('pageerror', e => priceErrors.push(e.message));
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('#new-booking');
+  await p.waitForSelector('#form-dialog[open]');
+  await p.waitForSelector('#f-packages-group:not([hidden])');
+  const groups = await p.$$eval('#booking-form .item-group-title', els => els.map(e => e.textContent));
+  assert(groups.join('|') === 'Flower walls|Neon signs|Extras|Package', 'items are grouped into walls, neon signs, extras and packages: ' + groups);
+  assert(await p.getByRole('group', { name: 'Neon signs' }).getByRole('checkbox').count() === 9 && await p.getByRole('group', { name: 'Package' }).getByRole('checkbox').count() === 3
+    && await p.getAttribute('#f-price', 'aria-describedby') === 'price-hint', 'screen readers hear each group’s name, and the price field is linked to its hint');
+  assert(await p.$$eval('#f-items [name="items"]', els => els.length) === 19 && await p.isVisible('[name="items"][value="neon-just-married"]'), 'all 19 items can be chosen, the neon signs included');
+  assert((await p.textContent('#f-packages')).includes('Save $80.00 with a flower wall and Bloom bar'), 'packages say what they save and include');
+  const priceIs = v => p.waitForFunction(want => document.getElementById('f-price').value === want, v);
+  await p.check('[name="items"][value="garden-wall"]');
+  await priceIs('450.00');
+  assert((await p.textContent('#price-hint')).startsWith('Worked out from the items'), 'the price fills itself in from the items');
+  await p.check('[name="items"][value="neon-just-married"]');
+  await priceIs('575.00');
+  await p.check('[name="items"][value="bloom-bar"]');
+  await p.check('[name="packages"][value="pkg-bridal-suite"]');
+  await priceIs('845.00');
+  assert(true, 'a neon sign and a package update the price, with the package saving taken off');
+  await p.fill('#f-price', '800');
+  await p.waitForFunction(() => document.getElementById('price-hint').textContent.includes('Use the item prices ($845.00)'));
+  await p.check('[name="items"][value="neon-engaged"]');
+  await p.waitForFunction(() => document.getElementById('price-hint').textContent.includes('($970.00)'));
+  assert(await p.inputValue('#f-price') === '800', 'a price she types stays when the items change');
+  await p.click('#price-hint button');
+  await priceIs('970.00');
+  assert((await p.textContent('#price-hint')).startsWith('Worked out'), '“Use the item prices” brings the worked-out price back');
+  await p.fill('#f-price', '');
+  await p.locator('#f-price').blur();
+  await priceIs('970.00');
+  assert((await p.textContent('#price-hint')).startsWith('Worked out'), 'clearing the price puts the worked-out price back');
+  await p.fill('#f-name', 'Price Person');
+  await p.fill('#f-date', LATER);
+  await p.fill('#f-start', '12:00');
+  await p.fill('#f-end', '16:00');
+  await p.click('#booking-form [type="submit"]');
+  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Booking saved');
+  const priced = s.log.filter(l => l.path === '/rest/v1/rpc/save_booking').pop().body.b;
+  assert(priced.price === '' && priced.form_version === 2 && JSON.stringify(priced.packages) === '["pkg-bridal-suite"]' && priced.items.includes('neon-engaged') && priced.items.includes('neon-just-married'),
+    'saved with its package and neon signs, the worked-out price left for the database to fill in: ' + JSON.stringify({ price: priced.price, v: priced.form_version }));
+  await p.click('[data-tab="bookings"]');
+  await p.waitForFunction(() => document.getElementById('booking-list').textContent.includes('$970.00'));
+  const rowText = await p.textContent('#booking-list li:has-text("Price Person")');
+  assert(rowText.includes('Just Married neon sign') && rowText.includes('· $970.00'), 'the booking list shows the items and price: ' + rowText.replace(/\s+/g, ' ').slice(0, 160));
+  await p.click('#booking-list li:has-text("Price Person") button');
+  const pricedDetail = await p.textContent('#booking-body');
+  assert(pricedDetail.includes('The Bridal Suite package') && pricedDetail.includes('$970.00'), 'details show the package and price');
+  await p.click('#booking-dialog [data-close]');
+  await p.click('#booking-list li:has-text("Jane Doe") button');
+  await p.click('#booking-body >> text=Edit');
+  await p.waitForFunction(() => document.getElementById('price-hint').textContent.includes('Use the item prices ($800.00)'));
+  assert(await p.inputValue('#f-price') === '450.00', 'editing a booking whose price was set by hand keeps that price');
+  await p.click('#form-dialog [data-close]');
+  // On a slow connection: saving before the new price arrives still saves the right one, and a booking whose
+  // price was worked out keeps working it out when items change before the first price arrives.
+  s.quoteDelay = 1500;
+  await p.click('#new-booking');
+  await p.fill('#f-name', 'Quick Saver');
+  await p.fill('#f-date', LATER);
+  await p.fill('#f-start', '08:00');
+  await p.fill('#f-end', '09:00');
+  await p.fill('#f-setup', '0');
+  await p.fill('#f-pickup', '0');
+  await p.check('[name="items"][value="greenery-wall"]');
+  await priceIs('450.00');
+  await p.check('[name="items"][value="sweets-cart"]');
+  await p.click('#booking-form [type="submit"]');
+  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Booking saved');
+  const quick = s.log.filter(l => l.path === '/rest/v1/rpc/save_booking').pop().body.b;
+  const quickRow = s.bookings.find(x => x.items.includes('sweets-cart') && x.start_local === `${LATER}T08:00:00`);
+  assert(quick.price === '' && quickRow && quickRow.price === 775,
+    'saving before the new price arrives still saves the price of what was saved ($775), not the old $450: ' + JSON.stringify({ sent: quick.price, saved: quickRow && quickRow.price }));
+  await p.click('#booking-list li:has-text("Price Person") button');
+  await p.click('#booking-body >> text=Edit');
+  assert(await p.inputValue('#f-price') === '970.00' && (await p.textContent('#price-hint')).startsWith('Worked out'), 'a worked-out price opens as worked out, straight away');
+  await p.check('[name="items"][value="pedestals"]');
+  await priceIs('1245.00');
+  assert((await p.textContent('#price-hint')).startsWith('Worked out'), 'and follows the items when they change before any price has arrived');
+  await p.click('#form-dialog [data-close]');
+  s.quoteDelay = 0;
+  assert(!priceErrors.length, 'no page errors: ' + priceErrors.join('; '));
+  await ctx.close();
+
+  /* Package list unreachable: editing a package booking keeps its package and price */
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  s = await fakeSupabase(ctx, { extra: [{ id: 30, customer_id: 1, status: 'confirmed', start_local: `${LATER}T12:00:00`, end_local: `${LATER}T16:00:00`, setup_minutes: 120, pickup_minutes: 120,
+    address: null, venue: null, event_type: 'Bridal shower', guests: null, price: 720, packages: ['pkg-bridal-suite'], deposit_paid: false, notes: null, items: ['garden-wall', 'bloom-bar'] }] });
+  s.packagesFail = true;
+  await ctx.addInitScript(signedIn, TOKEN);
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/owner/`, { waitUntil: 'networkidle' });
+  await p.click('[data-tab="bookings"]');
+  await p.click('#booking-list li:has-text("$720.00") button');
+  await p.click('#booking-body >> text=Edit');
+  await p.waitForSelector('#form-dialog[open]');
+  assert(await p.isHidden('#f-packages-group') && await p.inputValue('#f-price') === '720.00' && (await p.textContent('#price-hint')).startsWith('Worked out'),
+    'without the package list, the package price still shows as worked out');
+  await p.fill('#f-notes', 'Changed only the notes');
+  await p.click('#booking-form [type="submit"]');
+  await p.waitForFunction(() => document.getElementById('toast').textContent === 'Booking updated');
+  const kept = s.log.filter(l => l.path === '/rest/v1/rpc/save_booking').pop().body.b;
+  assert(JSON.stringify(kept.packages) === '["pkg-bridal-suite"]' && s.bookings.find(x => x.id === 30).price === 720, 'saving keeps the package and its $720 price');
+  s.packagesFail = false;
+  await p.click('#new-booking');
+  await p.waitForSelector('#f-packages-group:not([hidden])');
+  assert(true, 'the package list is fetched again when the form opens');
   await ctx.close();
 
   /* Old address */

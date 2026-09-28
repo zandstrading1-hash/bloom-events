@@ -10,7 +10,7 @@ These need real answers; nothing on the site should be guessed.
 2. **Contact details.** Confirm (586) 360-4200, hello@bloomevents.com and the bloomevents.com domain. Every booking request, the footer and the policy pages use them.
 3. **Social accounts.** The homepage structured data lists instagram.com/bloomevents and tiktok.com/@bloomevents, but no social links are shown. Confirm the real handles before linking them.
 4. **Reviews.** A reviews section would help, but only with real client reviews.
-5. **Neon signs.** The nine signs are on the Rentals page and, styled, in the Gallery; customers name the sign in their booking notes. The supplied grids give about 360×450 px per photo, so the original photos would look sharper on large screens. If she wants signs held like the walls (with availability), they need adding as rental items.
+5. **Neon signs and prices.** The nine signs can be booked like the walls (one of each), and every booking is priced from the catalog automatically. Confirm the prices (walls $450 each, neon signs $125, the package savings) since they now set each booking's price; custom-wording signs are still arranged through the notes. The supplied grids give about 360×450 px per photo, so the original photos would look sharper on large screens.
 6. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
 7. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
 
