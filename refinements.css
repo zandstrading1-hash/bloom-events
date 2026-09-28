@@ -842,3 +842,36 @@ body.has-picks .book-bar { display: block; position: fixed; right: 1.5rem; botto
   .book-form .form-row-when { grid-template-columns: 1fr 1fr; }
   .book-form .form-row-when .form-field:first-child { grid-column: 1 / -1; }
 }
+
+/* ============ Phone polish: less on screen while reading, one quiet Book button ============ */
+a[href^="tel:"] { white-space: nowrap; }
+@media (max-width: 960px) {
+  /* The header slides away while reading down the page and comes back on the way up (site.js). */
+  nav { transition: transform .25s ease; }
+  nav.nav-away { transform: translateY(-100%); }
+}
+@media (max-width: 700px) {
+  /* Book: a floating pill like on desktop, out of the way at the top of the page and wherever the page
+     already offers booking or the footer shows (site.js adds .is-away). */
+  .book-bar, body.has-picks .book-bar { left: auto; right: max(1rem, env(safe-area-inset-right, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); padding: 0; background: none; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; transition: opacity .2s ease, transform .2s ease, visibility 0s linear 0s; }
+  .book-bar-link { width: auto; min-height: 48px; padding: .7rem 1.3rem; font-size: .95rem; box-shadow: 0 12px 28px -12px rgba(75, 41, 55, .6); }
+  .book-bar.is-away { opacity: 0; transform: translateY(calc(100% + 1.5rem)); visibility: hidden; transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s; }
+  .js-ready body { padding-bottom: 0; }
+
+  /* Home: the tilted keepsake photo belongs to the desktop layout; on a phone it overlaps the main photo. */
+  .hero-keepsake { display: none; }
+
+  /* Gallery filters on one line. */
+  .gallery-filters { flex-wrap: nowrap; overflow-x: auto; gap: .4rem; scrollbar-width: none; }
+  .gallery-filters::-webkit-scrollbar { display: none; }
+  .gallery-filter { flex: 0 0 auto; min-height: 42px; padding: .5rem .8rem; font-size: .85rem; }
+
+  /* A shorter footer. */
+  footer { padding-top: 2.75rem; }
+  .footer-brand .footer-logo img.footer-logo-full { height: 60px; }
+  .footer-grid { gap: 2rem 1.5rem; padding-bottom: 2rem; }
+  .footer-col h2 { margin-bottom: .75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  nav, .book-bar, .book-bar.is-away { transition: none; }
+}

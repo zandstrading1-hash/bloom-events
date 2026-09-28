@@ -49,9 +49,9 @@ const fakeSupabase = async page => {
       let axeRes = '';
       if (w === 1280 || w === 390) { await p.addScriptTag({ content: axeSrc }); axeRes = (await p.evaluate(async () => (await axe.run(document, { resultTypes: ['violations'] })).violations.map(v => v.id + ' x' + v.nodes.length + ' ' + v.nodes[0].target.join(' ')))).join('; '); }
       const overflow = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-      const bar = await p.evaluate(() => { const q = document.querySelector('.book-bar'); return !q || getComputedStyle(q).display === 'none' ? 'hidden' : 'shown'; });
-      await p.evaluate(() => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }); }); await p.waitForTimeout(200);
-      const covered = await p.evaluate(() => { const q = document.querySelector('.book-bar'); if (!q || getComputedStyle(q).display === 'none') return false; const last = [...document.querySelectorAll('footer *')].filter(e => e.children.length === 0 && e.textContent.trim()).pop(); return last.getBoundingClientRect().bottom > q.getBoundingClientRect().top; });
+      const bar = await p.evaluate(() => { const q = document.querySelector('.book-bar'); return !q || getComputedStyle(q).display === 'none' || getComputedStyle(q).visibility === 'hidden' ? 'hidden' : 'shown'; });
+      await p.evaluate(() => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }); }); await p.waitForTimeout(500);
+      const covered = await p.evaluate(() => { const q = document.querySelector('.book-bar'); if (!q || getComputedStyle(q).display === 'none' || getComputedStyle(q).visibility === 'hidden') return false; const last = [...document.querySelectorAll('footer *')].filter(e => e.children.length === 0 && e.textContent.trim()).pop(); return last.getBoundingClientRect().bottom > q.getBoundingClientRect().top; });
       const bad = errs.length || overflow > 0 || covered || axeRes;
       if (bad) process.exitCode = 1;
       console.log((bad ? 'CHECK ' : 'ok    ') + pg + '@' + w, JSON.stringify({ axe: axeRes || undefined, errs: errs.length ? errs : undefined, overflow: overflow || undefined, bar, covered: covered || undefined }));

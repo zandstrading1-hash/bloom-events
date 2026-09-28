@@ -2,6 +2,35 @@
 (() => {
   'use strict';
   document.documentElement.classList.add('js-ready');
+
+  // Phones and tablets: the header slides away while reading down the page and comes back on the way up.
+  // The Book button steps aside at the top of the page and wherever the page already offers booking or the
+  // footer is showing (the styles only use this on phones).
+  const nav = document.querySelector('body > nav');
+  const bookBar = document.querySelector('.book-bar');
+  const small = matchMedia('(max-width: 960px)');
+  const booking = new Set();
+  const placeBookBar = () => {
+    if (bookBar) bookBar.classList.toggle('is-away', booking.size > 0 || (window.scrollY < 200 && !document.body.classList.contains('has-picks')));
+  };
+  if (bookBar && 'IntersectionObserver' in window) {
+    const watch = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) booking.add(e.target); else booking.delete(e.target); });
+      placeBookBar();
+    });
+    document.querySelectorAll('footer, .inquire').forEach(el => watch.observe(el));
+  }
+  let lastY = window.scrollY;
+  addEventListener('scroll', () => {
+    const y = window.scrollY;
+    if (nav && (y < 120 || !small.matches)) nav.classList.remove('nav-away');
+    else if (nav && Math.abs(y - lastY) > 6) nav.classList.toggle('nav-away', y > lastY && !nav.contains(document.activeElement));
+    if (Math.abs(y - lastY) > 6 || y < 120) lastY = y;
+    placeBookBar();
+  }, { passive: true });
+  if (nav) nav.addEventListener('focusin', () => nav.classList.remove('nav-away'));
+  placeBookBar();
+
   const filters = [...document.querySelectorAll('.gallery-filter')];
   const cards = [...document.querySelectorAll('.portfolio-card')];
   const films = document.getElementById('films');
@@ -371,6 +400,7 @@
       if (card) card.classList.toggle('is-picked', on);
     });
     document.body.classList.toggle('has-picks', picks.length > 0);
+    placeBookBar();
     document.querySelectorAll('.book-bar-link, .nav-cta').forEach(link => { link.href = bookHref(); });
     const label = document.querySelector('.book-bar-label');
     const count = document.querySelector('.book-bar-count');

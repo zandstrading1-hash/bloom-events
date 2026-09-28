@@ -75,6 +75,24 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   await p2.goto(BASE + '/contact.html?picks=red-rose-wall,red-rose-wall,not-a-wall', { waitUntil: 'networkidle' });
   const items2 = await p2.$$eval('#picks-list li span', els => els.map(e => e.textContent));
   assert(items2.filter(t => t === 'Red rose wall').length === 1 && !items2.some(t => /not-a-wall/.test(t)), 'link picks deduped, unknown ignored: ' + items2);
+  // phones: the header tucks away while reading down and comes back on the way up; the Book button stays off
+  // the first screen and steps aside where the page has its own Book button and over the footer
+  const m = await b.newPage({ viewport: { width: 390, height: 844 } });
+  await m.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', fake);
+  await m.goto(BASE + '/index.html', { waitUntil: 'networkidle' });
+  const navAway = () => m.evaluate(() => document.querySelector('body > nav').classList.contains('nav-away'));
+  assert(!(await navAway()) && await m.isHidden('.book-bar-link'), 'phone: the first screen has the header and no Book button over the hero');
+  await m.mouse.wheel(0, 1400); await m.waitForTimeout(500);
+  assert(await navAway() && await m.isVisible('.book-bar-link'), 'phone: reading down tucks the header away and shows the Book button');
+  await m.mouse.wheel(0, -300); await m.waitForTimeout(500);
+  assert(!(await navAway()), 'phone: scrolling back up brings the header back');
+  await m.evaluate(() => document.querySelector('.inquire').scrollIntoView({ block: 'center', behavior: 'instant' })); await m.waitForTimeout(500);
+  assert(await m.isHidden('.book-bar-link'), 'phone: the Book button steps aside where the page has its own');
+  await m.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' })); await m.waitForTimeout(500);
+  assert(await m.isHidden('.book-bar-link'), 'phone: and over the footer');
+  await m.evaluate(() => localStorage.setItem('bloom-picks', '["garden-wall"]'));
+  await m.goto(BASE + '/services.html', { waitUntil: 'networkidle' }); await m.waitForTimeout(300);
+  assert(await m.isVisible('.book-bar-link') && await m.textContent('.book-bar-label') === 'Book your pick', 'phone: with a pick, the Book button shows from the top of Rentals');
   // desktop: bar hidden until something is picked
   const d = await b.newPage({ viewport: { width: 1280, height: 800 } });
   await d.route('https://dwazctmqkrnajqmswtiy.supabase.co/**', fake);
