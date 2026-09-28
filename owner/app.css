@@ -54,7 +54,7 @@ legend { padding: 0; margin-bottom: .6rem; font: 400 1.1rem var(--heading); }
 
 /* Sign in and notices */
 .signin, .notice { max-width: 26rem; margin: 0 auto; padding: calc(2rem + env(safe-area-inset-top, 0px)) 1.25rem 3rem; display: grid; gap: 1.1rem; }
-.signin-logo { justify-self: center; width: 150px; height: auto; }
+.signin-logo { justify-self: center; width: 128px; height: auto; border-radius: 22px; box-shadow: 0 10px 24px -14px rgba(75, 41, 55, .45); }
 .signin h1 { text-align: center; font-size: 1.9rem; }
 .help summary { cursor: pointer; color: var(--rose); font-weight: 500; }
 .help form { margin-top: 1rem; }

@@ -25,15 +25,12 @@ Open http://127.0.0.1:8765/ in your browser. No build step is required.
 
 ## Logo files
 
-The logo is the name itself: "Bloom" with a line-drawn rose standing in for the first "o", over a ruled "EVENTS" line, in the site's plum (`#4b2937`) and berry (`#a83d64`). Text is converted to outlines, so no fonts need to be installed (wordmark: Cormorant Garamond SemiBold; "EVENTS": Jost Medium).
+The logo is the owner's own design: "Bloom" in white script with a lily, over "EVENTS", on a pink square. Every logo and icon file is made from `design/logo/bloom-events-logo-source.jpg` by `design/logo/build_supplied.py` (see `design/README.md`).
 
-- `bloom-events-logo.svg` / `.png` / `.pdf`: main logo, transparent background (used in the site footer)
-- `bloom-events-logo-cream.png`: main logo on the site's cream background
-- `bloom-events-logo-reversed.svg` / `.png`: all-cream version for photos and dark or berry backgrounds
-- `bloom-events-logo-stacked.svg` / `.png`: main logo on a square canvas
-- `bloom-events-logo-inline.svg`: one-line version used in the site header
-- `bloom-events-icon.svg` / `.png`: the rose on its own, for spaces too small for the name
-- `bloom-events-favicon.svg` / `.png`, `bloom-events-apple-touch-icon.png`: browser tab and home-screen icons
+- `bloom-events-logo.png` (1200 px) and `bloom-events-logo-tile.png` (360 px): the logo as supplied, pink square included. The tile is in the site footer and on the owner app's sign-in screen; the large one is the picture shown when a page is shared.
+- `bloom-events-logo-header.png`: the lettering alone in the site's berry (`#a83d64`) on a transparent background, for the light site header. Its thin strokes are thickened a little so it stays readable at header size.
+- `bloom-events-favicon.png`, `bloom-events-apple-touch-icon.png`: browser tab and home-screen icons.
+- `owner/icon-192.png`, `owner/icon-512.png`, `owner/icon-maskable-512.png`, `owner/apple-touch-icon.png`: the owner app's home-screen icons. Phones keep the icon from when the app was added, so a phone shows the new one after the app is removed from the Home Screen and added again.
 
 ## Booking
 

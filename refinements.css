@@ -895,3 +895,24 @@ a[href^="tel:"] { white-space: nowrap; }
   .wall-grid-note { font-size: .8125rem; }
 }
 @media (prefers-reduced-motion: reduce) { .wall-grid img { transition: none; } }
+
+/* ============ The owner's logo: berry lettering in the header, the pink tile in the footer ============ */
+.logo-full { height: 68px; }
+.footer-brand .footer-logo img.footer-logo-full { width: 132px; height: 132px; border-radius: 20px; }
+@media (max-width: 960px) { .logo-full { height: 52px; } }
+@media (max-width: 700px) { .footer-brand .footer-logo img.footer-logo-full { width: 104px; height: 104px; border-radius: 16px; } }
+@media (max-width: 360px) { .logo-full { height: 46px; } }
+
+/* ============ Rentals: the neon signs, all together ============ */
+.neon-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; max-width: 46rem; }
+.neon-grid img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 8px; background: #d8cfc5; }
+.rentals-neon .rentals-head .text-link { white-space: nowrap; }
+@media (max-width: 700px) {
+  .neon-grid { gap: .5rem; }
+  .neon-grid img { border-radius: 6px; }
+  .rentals-neon .rentals-head { flex-direction: column; align-items: flex-start; }
+}
+
+/* Gallery filters: five on one line on narrow phones, and the row never wider than its space. */
+@media (max-width: 700px) { .gallery-filters { min-width: 0; max-width: 100%; } }
+@media (max-width: 420px) { .gallery-filters { gap: .3rem; } .gallery-filter { padding: .5rem .62rem; font-size: .8rem; } }

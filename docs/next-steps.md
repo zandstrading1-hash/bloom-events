@@ -10,8 +10,9 @@ These need real answers; nothing on the site should be guessed.
 2. **Contact details.** Confirm (586) 360-4200, hello@bloomevents.com and the bloomevents.com domain. Every booking request, the footer and the policy pages use them.
 3. **Social accounts.** The homepage structured data lists instagram.com/bloomevents and tiktok.com/@bloomevents, but no social links are shown. Confirm the real handles before linking them.
 4. **Reviews.** A reviews section would help, but only with real client reviews.
-5. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
-6. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
+5. **Neon signs.** The nine signs are on the Rentals page and, styled, in the Gallery; customers name the sign in their booking notes. The supplied grids give about 360×450 px per photo, so the original photos would look sharper on large screens. If she wants signs held like the walls (with availability), they need adding as rental items.
+6. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
+7. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
 
 ## Availability calendar and Bloom Bookings
 
@@ -27,7 +28,7 @@ Built: the Rentals page calendar, booked-item blocking on the Rentals and Book p
 
 ## Logo
 
-- The live logo is the rose-as-"o" wordmark (PR #1). Its generator and the eight other concept directions (A-H) are in `design/logo/`; see `design/README.md`.
+- The live logo is the owner's own (September 2026): white script "Bloom" with a lily on pink. `design/logo/build_supplied.py` builds the site and owner-app files from it. The earlier rose-as-"o" wordmark and the eight concept directions (A-H) stay in `design/logo/` for reference; see `design/README.md`.
 - The concept comparison page is also published as a private Claude artifact: https://claude.ai/artifact/QkL8pVcgFDNuHHzoR4tbLb (share it from its Share menu before sending it to anyone).
 
 ## Tests
