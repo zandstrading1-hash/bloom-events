@@ -83,19 +83,24 @@ const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 
   await q.click('[data-pick="neon-oh-baby"]');
   assert(await q.getAttribute('[data-pick="neon-oh-baby"]', 'aria-pressed') === 'true' && await q.$eval('[data-pick-card="neon-oh-baby"]', el => el.classList.contains('is-picked')),
     'a neon sign can be picked like a wall');
-  await q.click('[data-pick="pkg-sweet-setup"]');
+  assert(await q.$$eval('[data-pick^="pkg-"]', els => els.length) === 0 && await q.isHidden('#packages'), 'no package deals on the Rentals page');
+  assert((await q.textContent('#flower-walls .rentals-note')).startsWith('From $299') && (await q.textContent('#neon-signs .rentals-note')).startsWith('From $30')
+    && (await q.textContent('#bloom-bars .extra-price')) === 'Price on request' && (await q.textContent('#sweets-cart .extra-price')) === 'From $5.95 per person'
+    && (await q.textContent('#pillar-settings .extra-price')) === 'From $120', 'the Rentals page shows the owner’s prices');
+  await q.click('[data-pick="pedestals"]');
   await q.click('[data-pick="garden-wall"]');
   await q.goto(BASE + '/contact.html', { waitUntil: 'networkidle' });
-  const neonItems = await q.$$eval('#picks-list li span', els => els.map(e => e.textContent));
-  assert(neonItems.includes('Oh Baby neon sign') && neonItems.includes('The Sweet Setup package'), 'the Book page lists the neon sign and package: ' + neonItems);
+  const neonItems = await q.$$eval('#picks-list li > span', els => els.map(e => e.textContent));
+  assert(neonItems.includes('Oh Baby neon sign') && neonItems.includes('White cylinder pillars') && await q.inputValue('#pillar-set') === '3',
+    'the Book page lists the neon sign and the pillars, a set of 3 to start: ' + neonItems);
   await q.fill('#name', 'Neon Person'); await q.fill('#email', 'neon@example.com');
   await q.fill('#event_date', '2027-07-10'); await q.selectOption('#event_start', '14:00'); await q.selectOption('#event_end', '18:00');
   const sentBefore = sent.length;
   await q.click('.form-submit');
   await q.waitForFunction(() => document.getElementById('form-status').classList.contains('success'));
   const nr = sent[sentBefore] || {};
-  assert(['neon-oh-baby', 'bloom-bar', 'sweets-cart', 'garden-wall'].every(i => (nr.items || []).includes(i)) && JSON.stringify(nr.packages) === '["pkg-sweet-setup"]',
-    'the request holds the neon sign and the package’s items, and names the package: ' + JSON.stringify({ items: nr.items, packages: nr.packages }));
+  assert(['neon-oh-baby', 'pedestals', 'garden-wall'].every(i => (nr.items || []).includes(i)) && nr.pillar_set === '3' && JSON.stringify(nr.packages) === '[]',
+    'the request holds the neon sign, the pillars with their set and the wall: ' + JSON.stringify({ items: nr.items, pillar_set: nr.pillar_set, packages: nr.packages }));
   await q.close();
   // phones: the header tucks away while reading down and comes back on the way up; the Book button stays off
   // the first screen and steps aside where the page has its own Book button and over the footer

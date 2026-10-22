@@ -98,7 +98,7 @@ const requests = s => s.log.filter(l => l.path.endsWith('/rpc/request_booking'))
   await p.selectOption('#pick-end', '11:00');
   await p.waitForFunction(() => document.getElementById('date-status').textContent.includes('booked at that time'));
   assert(await disabled('ivory-wall') && await disabled('bloom-bar'), 'an event that runs into setup time blocks those items');
-  assert(await disabled('pkg-sweet-setup') && await disabled('pkg-bridal-suite') && await disabled('pkg-full-bloom'), 'packages needing the bloom bar are blocked');
+  assert(await p.$$eval('[data-pick^="pkg-"]', els => els.length) === 0, 'no package deals are offered');
   assert(!(await disabled('greenery-wall')) && !(await disabled('sweets-cart')), 'free items still available');
   assert((await p.textContent('[data-pick="ivory-wall"]')).includes('Booked at that time') && await p.isVisible('[data-pick-card="ivory-wall"] .pick-note'), 'blocked item says why');
   assert((await p.textContent('#date-status')).includes('9 AM to 11 AM: 2 items are booked at that time'), 'status names the time: ' + await p.textContent('#date-status'));
@@ -163,18 +163,27 @@ const requests = s => s.log.filter(l => l.path.endsWith('/rpc/request_booking'))
   assert((await p.textContent('#form-status')).includes('We’re holding Greenery wall for you until'), 'visitor told their pick is held: ' + await p.textContent('#form-status'));
   assert(await p.inputValue('#name') === '' && await p.evaluate(() => localStorage.getItem('bloom-picks')) === '[]' && await p.evaluate(() => localStorage.getItem('bloom-time')) === null, 'form, picks and times cleared after sending');
 
-  // Packages are held as their parts and named in the notes
-  await p.goto(`${BASE}/contact.html?picks=pkg-sweet-setup,garden-wall&date=${G}&time=11:00-13:00`, { waitUntil: 'networkidle' });
-  await p.waitForSelector('#picks-list li.is-booked');
-  assert((await p.textContent('#date-note')).startsWith('The Sweet Setup package isn’t available'), 'a package with a taken part is flagged');
-  await p.selectOption('#event_start', '13:00');
-  await p.selectOption('#event_end', '15:00');
-  await p.fill('#name', 'Package Person');
-  await p.fill('#email', 'pkg@example.com');
+  // Pillars go out as a set of 3 or 5, and the sweets cart needs the guest count (it's priced per guest)
+  await p.goto(`${BASE}/contact.html?picks=pedestals,sweets-cart&pillars=5&date=${G}&time=13:00-15:00`, { waitUntil: 'networkidle' });
+  assert(await p.inputValue('#pillar-set') === '5' && (await p.textContent('#picks-list')).includes('White cylinder pillars'), 'the pillar set from the link is chosen on the Book page');
+  assert(await p.isVisible('#guests-hint') && await p.evaluate(() => document.getElementById('guests').required), 'with the sweets cart, the guest count is asked for');
+  await p.selectOption('#pillar-set', '3');
+  assert(await p.inputValue('#rentals-field') === 'White cylinder pillars (set of 3), Sweets cart', 'the picks name the set: ' + await p.inputValue('#rentals-field'));
+  await p.fill('#name', 'Pillar Person');
+  await p.fill('#email', 'pillar@example.com');
+  const before = requests(s).length;
+  await p.click('.form-submit');
+  assert(requests(s).length === before && !(await p.evaluate(() => document.getElementById('guests').checkValidity())), 'it isn’t sent without the guest count');
+  await p.fill('#guests', '60');
   await p.click('.form-submit');
   await p.waitForFunction(() => document.getElementById('form-status').classList.contains('success'));
-  const pkg = requests(s).pop().body.r;
-  assert(pkg.items.join() === 'bloom-bar,sweets-cart,garden-wall' && pkg.notes === 'Package: The Sweet Setup package', 'package held as its parts and named in the notes: ' + JSON.stringify(pkg));
+  const set = requests(s).pop().body.r;
+  assert(set.items.join() === 'pedestals,sweets-cart' && set.pillar_set === '3' && set.guests === '60' && JSON.stringify(set.packages) === '[]' && set.notes === '',
+    'the request carries the pillar set and guest count: ' + JSON.stringify(set));
+  assert(await p.evaluate(() => localStorage.getItem('bloom-pillar-set')) === '3', 'the set is remembered');
+  await p.goto(`${BASE}/contact.html?picks=garden-wall&date=${G}&time=13:00-15:00`, { waitUntil: 'networkidle' });
+  assert(await p.isHidden('#guests-hint') && !(await p.evaluate(() => document.getElementById('guests').required)) && (await p.$('#pillar-set')) === null,
+    'without the sweets cart or pillars, neither is asked for');
 
   // Answers from Supabase: booked meanwhile, too many waiting, too busy
   const fill = async (email, pick = 'pink-ombre-wall') => {

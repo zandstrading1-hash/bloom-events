@@ -66,7 +66,7 @@ def as_role(role, email=None, amr='password'):
     x(f'set role {role}')
 
 def save(**b):
-    return x('select public.save_booking(%s::jsonb)', [json.dumps({'form_version': 2, **b})]).fetchone()[0]
+    return x('select public.save_booking(%s::jsonb)', [json.dumps({'form_version': 3, **b})]).fetchone()[0]
 
 def expect_error(fn, code, msg):
     try:
@@ -299,11 +299,11 @@ def admin_conn():
     c.commit()
     return c
 t1, t2 = admin_conn(), admin_conn()
-first = t1.execute('select public.save_booking(%s::jsonb)', [json.dumps(dict(customer_name='First', date='2027-09-01', start='14:00', end='18:00', items=['garden-wall'], form_version=2))]).fetchone()[0]
+first = t1.execute('select public.save_booking(%s::jsonb)', [json.dumps(dict(customer_name='First', date='2027-09-01', start='14:00', end='18:00', items=['garden-wall'], form_version=3))]).fetchone()[0]
 race = {}
 def second():
     try:
-        race['id'] = t2.execute('select public.save_booking(%s::jsonb)', [json.dumps(dict(customer_name='Second', date='2027-09-01', start='15:00', end='17:00', items=['garden-wall', 'pedestals'], form_version=2))]).fetchone()[0]
+        race['id'] = t2.execute('select public.save_booking(%s::jsonb)', [json.dumps(dict(customer_name='Second', date='2027-09-01', start='15:00', end='17:00', items=['garden-wall', 'pedestals'], form_version=3))]).fetchone()[0]
         t2.commit()
     except psycopg.Error as e:
         race['err'] = e.sqlstate
@@ -379,7 +379,7 @@ alerts = lambda: x('select count(*) from private.alerts').fetchone()[0]
 SEND_URL = 'https://dwazctmqkrnajqmswtiy.supabase.co/functions/v1/bloom-bookings/send'
 
 names = [x('select private.item_names(%s)', [ids]).fetchone()[0] for ids in (['bloom-bar'], ['bloom-bar', 'garden-wall'], ['sweets-cart', 'ivory-wall', 'pedestals', 'nope'], [])]
-check(names == ['Bloom bar', 'Garden flower wall and Bloom bar', 'Ivory flower wall, White pedestals and Sweets cart', None], f'item names read naturally, in catalog order: {names}')
+check(names == ['Bloom bar', 'Garden flower wall and Bloom bar', 'Ivory flower wall, White cylinder pillars and Sweets cart', None], f'item names read naturally, in catalog order: {names}')
 
 # Who can call what.
 EP1, EP2, EP3 = 'https://fcm.googleapis.com/fcm/send/phone-one', 'https://web.push.apple.com/phone-two', 'https://web.push.apple.com/helper-phone'
@@ -461,7 +461,7 @@ check(got['keys'] == {'public': 'A' * 87, 'private': {'kty': 'EC', 'd': 'first'}
 check(len(got['alerts']) == 2, f'both waiting alerts handed out: {len(got["alerts"])}')
 first_alert = got['alerts'][0]
 d = datetime.date(2027, 10, 2)
-check(first_alert['message'] == {'title': 'New request: Alert Me', 'body': f'{d:%a}, {d:%b} 2, 2027, 2 PM – 6 PM · Garden flower wall and Bloom bar · $800.00',
+check(first_alert['message'] == {'title': 'New request: Alert Me', 'body': f'{d:%a}, {d:%b} 2, 2027, 2 PM – 6 PM · Garden flower wall and Bloom bar',
                                  'url': './?open=requests', 'tag': f'request-{alert_booking}', 'badge': waiting},
       f'alert text names the customer, time and items, with the waiting count: {first_alert["message"]}')
 check(sorted(p['endpoint'] for p in first_alert['phones']) == sorted([EP1, EP2, EP3]) and all(p['p256dh'] == P256 and p['auth'] == AUTH for p in first_alert['phones']),
@@ -545,7 +545,7 @@ check(x("select public.calendar_feed('nope')").fetchone()[0] is None and x('sele
 feed = x('select public.calendar_feed(%s)', [t2]).fetchone()[0]
 x('reset role')
 summaries = [e['summary'] for e in feed]
-check('Cal Person · Ivory flower wall and White pedestals' in summaries and 'On hold: Web Hold · Champagne rose wall' in summaries, f'confirmed bookings and live holds are listed: {summaries}')
+check('Cal Person · Ivory flower wall and White cylinder pillars' in summaries and 'On hold: Web Hold · Champagne rose wall' in summaries, f'confirmed bookings and live holds are listed: {summaries}')
 check(not any(s.startswith(('Cancelled One', 'Long Ago', 'Far Off', 'On hold: Ran Out')) for s in summaries), 'cancelled, long-past, far-off and run-out holds are left out')
 ev = next(e for e in feed if e['summary'].startswith('Cal Person'))
 check(ev['uid'] == f'booking-{cal}@bloom-events' and ev['start'] == '20261205T190000Z' and ev['end'] == '20261205T230000Z' and ev['status'] == 'CONFIRMED' and ev['location'] == '9 Elm St, Macomb',
@@ -555,50 +555,73 @@ check(ev['description'] == 'Setup from 12 PM, pickup by 8 PM\nVenue: Elm Hall\nP
 hold = next(e for e in feed if e['summary'].startswith('On hold: Web Hold'))
 check(hold['status'] == 'TENTATIVE' and hold['description'].split('\n')[-1].startswith('On hold (website request) until '), f'holds are marked tentative with their end: {hold["description"]!r}')
 
-# ---------- Bookable neon signs and automatic prices ----------
+# ---------- Neon signs, prices, pillar sets and per-person pricing ----------
 x('reset role')
 x("update bookings set created_at = created_at - interval '2 days'")
 x("update bookings set status = 'declined' where status = 'requested' and source = 'website'")
 
-catalog = x('select id, kind, price from public.items order by sort').fetchall()
-kinds = {k: [i for i, kk, _ in catalog if kk == k] for k in ('wall', 'extra', 'neon')}
-prices = {i: float(pr) for i, _, pr in catalog}
+catalog = x('select id, kind, price, per_person from public.items order by sort').fetchall()
+kinds = {k: [i for i, kk, _, _ in catalog if kk == k] for k in ('wall', 'extra', 'neon')}
+prices = {i: None if pr is None else float(pr) for i, _, pr, _ in catalog}
 check(len(catalog) == 19 and len(kinds['wall']) == 7 and kinds['extra'] == ['bloom-bar', 'pedestals', 'sweets-cart'] and len(kinds['neon']) == 9,
-      f'catalog: 7 walls, 3 extras and 9 neon signs: {[i for i, _, _ in catalog]}')
-check(all(prices[w] == 450 for w in kinds['wall']) and (prices['bloom-bar'], prices['pedestals'], prices['sweets-cart']) == (350, 275, 325)
-      and all(prices[n] == 125 for n in kinds['neon']), 'catalog prices match the Rentals page')
-pk = x('select id, parts, needs_wall, saving from public.packages order by sort').fetchall()
-check([(r[0], r[1], r[2], float(r[3])) for r in pk] == [('pkg-sweet-setup', ['bloom-bar', 'sweets-cart'], False, 75.0),
-      ('pkg-bridal-suite', ['bloom-bar'], True, 80.0), ('pkg-full-bloom', ['bloom-bar', 'pedestals', 'sweets-cart'], True, 150.0)],
-      f'packages and their savings: {pk}')
+      f'catalog: 7 walls, 3 extras and 9 neon signs: {[i for i, _, _, _ in catalog]}')
+check(all(prices[w] == 299 for w in kinds['wall']) and all(prices[n] == 30 for n in kinds['neon'])
+      and (prices['bloom-bar'], prices['pedestals'], prices['sweets-cart']) == (None, 200, 5.95),
+      f'catalog prices are the owner’s: walls $299, neon $30, pillars $200 (set of 5), sweets cart $5.95, bloom bar on request: {prices}')
+check([i for i, _, _, pp in catalog if pp] == ['sweets-cart'], 'only the sweets cart is priced per person')
+sets = [(r[0], r[1], float(r[2])) for r in x('select item_id, size, price from public.item_sets order by 1, 2').fetchall()]
+check(sets == [('pedestals', 3, 120.0), ('pedestals', 5, 200.0)], f'pillars come as a set of 3 ($120) or 5 ($200): {sets}')
+check(x('select count(*) from public.packages').fetchone()[0] == 0, 'no package deals are offered')
+check(x("select name from public.items where id = 'pedestals'").fetchone()[0] == 'White cylinder pillars', 'the pillars have her name for them')
 
-def quote(items, packages=[]):
-    got = x('select public.booking_quote(%s, %s)', [items, packages]).fetchone()[0]
+# Packages still work when she adds some again (these are made up for the test).
+x("""insert into public.packages (id, name, parts, needs_wall, saving, sort) values
+  ('pkg-wall-neon', 'The Neon Wall package', '{neon-engaged}', true, 29, 1),
+  ('pkg-pillars', 'The Pillar package', '{pedestals}', true, 25, 2),
+  ('pkg-signs', 'The Sign Pair package', '{neon-just-married,neon-engaged}', false, 10, 3)""")
+
+
+def quote(items, packages=[], guests=None, pillars=None):
+    got = x('select public.booking_quote(%s, %s, %s, %s)', [items, packages, guests, pillars]).fetchone()[0]
     return None if got is None else float(got)
-for items, packages, want, why in [
-    ([], [], None, 'nothing picked has no price'),
-    (['nope'], [], None, 'nor do only unknown items'),
-    (['garden-wall'], [], 450, 'one wall'),
-    (['garden-wall', 'neon-engaged'], [], 575, 'a wall and a neon sign'),
-    (['garden-wall', 'garden-wall', 'nope'], ['pkg-nope'], 450, 'duplicates count once; unknown items and packages are ignored'),
-    (['bloom-bar', 'sweets-cart'], ['pkg-sweet-setup'], 600, 'The Sweet Setup is $600'),
-    (['bloom-bar'], ['pkg-sweet-setup'], 350, 'a package missing one of its items gets no saving'),
-    (['garden-wall', 'bloom-bar'], ['pkg-bridal-suite'], 720, 'The Bridal Suite (a wall and the bloom bar) is $720'),
-    (['bloom-bar'], ['pkg-bridal-suite'], 350, 'The Bridal Suite without a wall gets no saving'),
-    (['ivory-wall', 'bloom-bar', 'pedestals', 'sweets-cart'], ['pkg-full-bloom'], 1250, 'The Full Bloom is $1,250'),
-    (['ivory-wall', 'garden-wall', 'bloom-bar', 'pedestals', 'sweets-cart', 'neon-oh-baby'], ['pkg-full-bloom'], 1825, 'extras on top of a package are added at full price'),
-    (['ivory-wall', 'bloom-bar', 'pedestals', 'sweets-cart'], ['pkg-full-bloom', 'pkg-sweet-setup'], 1250, 'two packages can’t share the same items'),
-    (['garden-wall', 'bloom-bar', 'sweets-cart'], ['pkg-sweet-setup', 'pkg-bridal-suite'], 1045, 'the bigger saving is counted first'),
+
+
+for args, want, why in [
+    (([],), None, 'nothing picked has no price'),
+    ((['nope'],), None, 'nor do only unknown items'),
+    ((['garden-wall'],), 299, 'one wall'),
+    ((['garden-wall', 'neon-engaged'],), 329, 'a wall and a neon sign'),
+    ((['garden-wall', 'garden-wall', 'nope'], ['pkg-nope']), 299, 'duplicates count once; unknown items and packages are ignored'),
+    ((['pedestals'],), 200, 'pillars without a set size are priced as the set of 5'),
+    ((['pedestals'], [], None, 3), 120, 'a set of 3 pillars is $120'),
+    ((['pedestals'], [], None, 5), 200, 'a set of 5 pillars is $200'),
+    ((['sweets-cart'], [], 100), 595, 'the sweets cart for 100 guests is $595'),
+    ((['garden-wall', 'sweets-cart'], [], 50), 596.5, 'a wall and the sweets cart for 50 guests'),
+    ((['sweets-cart'],), None, 'the sweets cart without a guest count has no price'),
+    ((['garden-wall', 'neon-engaged'], [], 120), 329, 'the guest count only matters for per-person items'),
+    ((['bloom-bar'],), None, 'the bloom bar is priced on request'),
+    ((['garden-wall', 'bloom-bar'],), None, 'so a booking with it has no worked-out price'),
+    ((['garden-wall', 'neon-engaged'], ['pkg-wall-neon']), 300, 'a package takes its saving off'),
+    ((['neon-engaged'], ['pkg-wall-neon']), 30, 'a package that needs a wall gets no saving without one'),
+    ((['ivory-wall', 'pedestals'], ['pkg-pillars'], None, 3), 394, 'a package saving applies to the chosen pillar set'),
+    ((['ivory-wall', 'neon-engaged', 'pedestals'], ['pkg-wall-neon', 'pkg-pillars'], None, 5), 500, 'two packages can’t share one wall: the bigger saving wins'),
+    ((['ivory-wall', 'garden-wall', 'neon-engaged', 'pedestals'], ['pkg-wall-neon', 'pkg-pillars'], None, 5), 774, 'with two walls both savings apply'),
 ]:
-    got = quote(items, packages)
+    got = quote(*args)
     check(got == want, f'price: {why} ({got})')
+x('begin')
+x("update public.items set price = 0 where kind = 'neon'")
+check(quote(['neon-just-married', 'neon-engaged'], ['pkg-signs']) == 0, 'a package never costs less than nothing')
+x('rollback')
 
 # Visitors can read prices and work out a quote, but can't change anything.
 as_role('anon')
-check(x('select count(*) from public.items').fetchone()[0] == 19 and x('select count(*) from public.packages').fetchone()[0] == 3, 'visitors can read the catalog and packages')
-check(float(x("select public.booking_quote('{garden-wall}')").fetchone()[0]) == 450, 'visitors can work out a price')
+check(x('select count(*) from public.items').fetchone()[0] == 19 and x('select count(*) from public.item_sets').fetchone()[0] == 2
+      and x('select count(*) from public.packages').fetchone()[0] == 3, 'visitors can read the catalog, sets and packages')
+check(float(x("select public.booking_quote('{garden-wall}')").fetchone()[0]) == 299, 'visitors can work out a price')
+check(float(x("select public.booking_quote('{sweets-cart}', '{}', 10, null)").fetchone()[0]) == 59.5, 'including per-person prices')
 for sql, what in [("update public.items set price = 1", 'change a price'), ("insert into public.items (id, name, kind, price, sort) values ('x', 'x', 'wall', 1, 99)", 'add an item'),
-                  ("delete from public.packages", 'delete packages')]:
+                  ("delete from public.packages", 'delete packages'), ("update public.item_sets set price = 1", 'change a set price')]:
     x('begin')
     expect_error(lambda: x(sql), '42501', f'visitors can’t {what}')
     x('rollback')
@@ -606,11 +629,16 @@ as_role('authenticated', ADMIN)
 x('begin')
 expect_error(lambda: x("update public.items set price = 1"), '42501', 'prices aren’t changed through the app’s access either')
 x('rollback')
+x('reset role')
+check(x("select count(*) from pg_proc where proname = 'booking_quote'").fetchone()[0] == 1, 'only the current price function exists')
 
 # Website requests: neon signs are held like the walls, and the price is saved with the request.
 as_role('anon')
 req(name='Neon Fan', email='neon@example.com', date='2027-11-10', start='18:00', end='22:00', items=['garden-wall', 'neon-just-married'])
-req(name='Package Fan', email='package@example.com', date='2027-11-11', start='12:00', end='16:00', items=['ivory-wall', 'bloom-bar'], packages=['pkg-bridal-suite', 'pkg-nope'])
+req(name='Package Fan', email='package@example.com', date='2027-11-11', start='12:00', end='16:00', items=['ivory-wall', 'neon-engaged'], packages=['pkg-wall-neon', 'pkg-nope'])
+req(name='Pillar Fan', email='pillar@example.com', date='2027-11-16', start='12:00', end='16:00', items=['champagne-wall', 'pedestals'], pillar_set='3')
+req(name='Sweet Fan', email='sweet@example.com', date='2027-11-17', start='12:00', end='16:00', items=['sweets-cart'], guests='100', pillar_set='5')
+req(name='Bloom Fan', email='bloom@example.com', date='2027-11-18', start='12:00', end='16:00', items=['bloom-bar', 'red-rose-wall'], guests='40')
 busy = [r[0] for r in x("select item_id from public.availability('2027-11-10', '2027-11-10')").fetchall()]
 check('neon-just-married' in busy, f'a requested neon sign shows as busy to visitors: {busy}')
 e = expect_error(lambda: req(name='Late Fan', email='late@example.com', date='2027-11-10', start='20:00', end='23:00', items=['neon-just-married']), '23P01',
@@ -620,10 +648,18 @@ check(req(name='Other Sign', email='other@example.com', date='2027-11-10', start
       'a different sign at the same time is fine')
 expect_error(lambda: req(name='Made Up', email='madeup@example.com', date='2027-11-13', start='12:00', end='13:00', items=['neon-made-up']), '22023',
              'an item that isn’t in the catalog is refused')
+expect_error(lambda: req(name='Odd Set', email='odd@example.com', date='2027-11-19', start='12:00', end='13:00', items=['pedestals'], pillar_set='4'), '22023',
+             'a pillar set that isn’t 3 or 5 is refused')
+e = expect_error(lambda: req(name='Second Set', email='second@example.com', date='2027-11-16', start='13:00', end='14:00', items=['pedestals'], pillar_set='3'), '23P01',
+                 'with 5 pillars, a second set can’t go out at the same time')
 x('reset role')
-rows = {r[0]: (float(r[1]), r[2]) for r in x("select c.email, b.price, b.packages from bookings b join customers c on c.id = b.customer_id where c.email in ('neon@example.com', 'package@example.com')").fetchall()}
-check(rows.get('neon@example.com') == (575.0, []), f'a request is priced from its items: {rows.get("neon@example.com")}')
-check(rows.get('package@example.com') == (720.0, ['pkg-bridal-suite']), f'a package request keeps its package and saving: {rows.get("package@example.com")}')
+rows = {r[0]: (None if r[1] is None else float(r[1]), r[2], r[3]) for r in x(
+    "select c.email, b.price, b.packages, b.pillar_set from bookings b join customers c on c.id = b.customer_id where b.source = 'website' and c.email in ('neon@example.com', 'package@example.com', 'pillar@example.com', 'sweet@example.com', 'bloom@example.com')").fetchall()}
+check(rows.get('neon@example.com') == (329.0, [], None), f'a request is priced from its items: {rows.get("neon@example.com")}')
+check(rows.get('package@example.com') == (300.0, ['pkg-wall-neon'], None), f'a package request keeps its package and saving: {rows.get("package@example.com")}')
+check(rows.get('pillar@example.com') == (419.0, [], 3), f'a pillar request keeps its set and is priced for it: {rows.get("pillar@example.com")}')
+check(rows.get('sweet@example.com') == (595.0, [], None), f'the sweets cart is priced for the guests, and a set size without pillars is dropped: {rows.get("sweet@example.com")}')
+check(rows.get('bloom@example.com') == (None, [], None), f'a request with the bloom bar is left for her to price: {rows.get("bloom@example.com")}')
 check(x("select private.item_names('{neon-engaged,ivory-wall}')").fetchone()[0] == 'Ivory flower wall and Engaged neon sign', 'item names come from the catalog, in catalog order')
 x('begin')
 def unknown_item():
@@ -635,15 +671,30 @@ x('rollback')
 # The owner's bookings: the price fills itself in unless she gives one.
 as_role('authenticated', ADMIN)
 auto = save(customer_name='Owner Neon', date='2027-11-12', start='10:00', end='14:00', items=['pink-ombre-wall', 'neon-oh-baby'])
-pkg = save(customer_name='Owner Package', date='2027-11-14', start='10:00', end='14:00', items=['champagne-wall', 'bloom-bar'], packages=['pkg-bridal-suite'])
+pkg = save(customer_name='Owner Package', date='2027-11-14', start='10:00', end='14:00', items=['champagne-wall', 'neon-engaged'], packages=['pkg-wall-neon'])
 own = save(customer_name='Owner Price', date='2027-11-15', start='10:00', end='14:00', items=['red-rose-wall'], price='999')
-row = lambda i: x('select price, packages from owner_bookings where id = %s', [i]).fetchone()
-check(float(row(auto)[0]) == 575 and row(auto)[1] == [], f'with no price given, the booking is priced from its items: {row(auto)}')
-check(float(row(pkg)[0]) == 720 and row(pkg)[1] == ['pkg-bridal-suite'], f'a package booking keeps its package and saving: {row(pkg)}')
-check(float(row(own)[0]) == 999, 'a price she types herself is kept')
+pillars = save(customer_name='Owner Pillars', date='2027-11-25', start='10:00', end='14:00', items=['ivory-texture-wall', 'pedestals'], pillar_set='3')
+sweets = save(customer_name='Owner Sweets', date='2027-11-21', start='10:00', end='14:00', items=['sweets-cart'], guests='80')
+bloom = save(customer_name='Owner Bloom', date='2027-11-22', start='10:00', end='14:00', items=['bloom-bar'], guests='30')
+row = lambda i: x('select price, packages, pillar_set, item_price from owner_bookings where id = %s', [i]).fetchone()
+num = lambda v: None if v is None else float(v)
+check(num(row(auto)[0]) == 329 and row(auto)[1] == [], f'with no price given, the booking is priced from its items: {row(auto)}')
+check(num(row(pkg)[0]) == 300 and row(pkg)[1] == ['pkg-wall-neon'], f'a package booking keeps its package and saving: {row(pkg)}')
+check(num(row(own)[0]) == 999, 'a price she types herself is kept')
+check(num(row(pillars)[0]) == 419 and row(pillars)[2] == 3 and num(row(pillars)[3]) == 419, f'a booking keeps its pillar set and is priced for it: {row(pillars)}')
+check(num(row(sweets)[0]) == 476, f'the sweets cart is priced for her guest count (80 x $5.95): {row(sweets)}')
+check(row(bloom)[0] is None and row(bloom)[3] is None, f'a bloom bar booking waits for her price: {row(bloom)}')
+save(id=str(bloom), customer_id=str(x('select customer_id from bookings where id = %s', [bloom]).fetchone()[0]), customer_name='Owner Bloom',
+     date='2027-11-22', start='10:00', end='14:00', items=['bloom-bar'], guests='30', price='650')
+check(num(row(bloom)[0]) == 650, 'and keeps the price she gives it')
 save(id=str(auto), customer_id=str(x('select customer_id from bookings where id = %s', [auto]).fetchone()[0]), customer_name='Owner Neon',
      date='2027-11-12', start='10:00', end='14:00', items=['pink-ombre-wall', 'neon-oh-baby', 'neon-engaged'], price='', status='confirmed')
-check(float(row(auto)[0]) == 700, f'editing with the price left empty works it out again: {row(auto)}')
+check(num(row(auto)[0]) == 359, f'editing with the price left empty works it out again: {row(auto)}')
+save(id=str(pillars), customer_id=str(x('select customer_id from bookings where id = %s', [pillars]).fetchone()[0]), customer_name='Owner Pillars',
+     date='2027-11-25', start='10:00', end='14:00', items=['ivory-texture-wall'], pillar_set='3', price='')
+check(row(pillars)[2] is None and num(row(pillars)[0]) == 299, f'taking the pillars off drops the set: {row(pillars)}')
+expect_error(lambda: save(customer_name='Bad Set', date='2027-11-23', start='10:00', end='14:00', items=['pedestals'], pillar_set='4'), '23514',
+             'the owner app can’t save a pillar set that isn’t 3 or 5')
 x('reset role')
 feed_token = x("insert into private.calendar_link (token) values (repeat('c', 64)) on conflict (id) do update set token = excluded.token returning token").fetchone()[0]
 as_role('service_role')
@@ -656,46 +707,40 @@ check(summary == 'Owner Neon · Pink ombre wall, Oh Baby neon sign and Engaged n
 old = x("insert into bookings (event_start, event_end, status) values ('2027-12-20 10:00-05', '2027-12-20 12:00-05', 'confirmed') returning id").fetchone()[0]
 x("insert into booking_items (booking_id, item_id) values (%s, 'greenery-wall'), (%s, 'neon-congrats')", [old, old])
 x(SCHEMA)
-check(float(x('select price from bookings where id = %s', [old]).fetchone()[0]) == 575, 'running the schema prices bookings that had no price')
+check(float(x('select price from bookings where id = %s', [old]).fetchone()[0]) == 329, 'running the schema prices bookings that had no price')
 check(float(x('select price from bookings where id = %s', [own]).fetchone()[0]) == 999, 'and leaves prices that were set alone')
+check(x('select count(*) from public.packages').fetchone()[0] == 3 and float(x("select price from public.items where id = 'garden-wall'").fetchone()[0]) == 299,
+      'running the schema again keeps the packages and prices there are')
 
 # ---------- Review fixes: prices ----------
-# An app opened before the update can't save (it would drop the items it doesn't show).
+# An app opened before an update can't save (it would drop what it doesn't show).
 as_role('authenticated', ADMIN)
 old_app = dict(customer_name='Old App', date='2027-12-22', start='10:00', end='12:00', items=['garden-wall'])
-for version, what in [(None, 'with no form version'), (1, 'from form version 1')]:
+for version, what in [(None, 'with no form version'), (1, 'from form version 1'), (2, 'from form version 2 (before pillar sets and guests)')]:
     payload = dict(old_app) if version is None else dict(old_app, form_version=version)
     e = expect_error(lambda: x('select public.save_booking(%s::jsonb)', [json.dumps(payload)]), 'P0001', f'a save {what} is refused')
     check(e is not None and 'out of date' in e.diag.message_primary, f'and says the app is out of date: {e and e.diag.message_primary}')
 check(save(**old_app) is not None, 'the current app saves')
 
 # owner_bookings says what the items and package come to, so the app can tell a worked-out price from her own.
-ip = lambda i: x('select price, item_price from owner_bookings where id = %s', [i]).fetchone()
-check(tuple(map(float, ip(pkg))) == (720, 720) and tuple(map(float, ip(own))) == (999, 450), f'owner_bookings has the item price: {ip(pkg)} {ip(own)}')
+ip = lambda i: tuple(num(v) for v in x('select price, item_price from owner_bookings where id = %s', [i]).fetchone())
+check(ip(pkg) == (300, 300) and ip(own) == (999, 299), f'owner_bookings has the item price: {ip(pkg)} {ip(own)}')
 
-# A saving bigger than its items never makes a negative price, so requests still go through.
+# A request with nothing picked has no price, and its alert doesn't show one; a priced one does.
 x('reset role')
-x('begin')
-x("update public.items set price = 0 where id = 'bloom-bar'")
-x("update public.items set price = 50 where id = 'sweets-cart'")
-check(quote(['bloom-bar', 'sweets-cart'], ['pkg-sweet-setup']) == 0, 'a package never costs less than nothing')
-as_role('anon')
-check(req(name='Cheap Cart', email='cheap@example.com', date='2027-12-23', start='10:00', end='12:00', items=['bloom-bar', 'sweets-cart'], packages=['pkg-sweet-setup']).get('hold_until') is not None,
-      'and a request for it still goes through')
-x('rollback')
-
-# A request with nothing picked has no price, and its alert doesn't show one.
-x('reset role')
-x("update bookings set status = 'declined' where status = 'requested' and source = 'website'")
+x("update bookings set status = 'declined', created_at = created_at - interval '2 days' where source = 'website'")
 x('delete from private.alerts')
 as_role('anon')
 req(name='Just Asking', email='asking@example.com', date='2027-12-24', start='10:00', end='12:00', items=[])
+req(name='Priced Ask', email='priced@example.com', date='2027-12-26', start='10:00', end='12:00', items=['garden-wall', 'neon-oh-baby'])
 x('reset role')
 check(x("select b.price from bookings b join customers c on c.id = b.customer_id where c.email = 'asking@example.com'").fetchone()[0] is None, 'a request with nothing picked has no price')
 as_role('service_role')
-body = next((a['message']['body'] for a in x('select public.claim_alerts()').fetchone()[0]['alerts'] if a['message']['title'] == 'New request: Just Asking'), None)
+bodies = {a['message']['title']: a['message']['body'] for a in x('select public.claim_alerts()').fetchone()[0]['alerts']}
 x('reset role')
+body = bodies.get('New request: Just Asking')
 check(body is not None and '$' not in body, f'and its alert leaves the price out: {body!r}')
+check((bodies.get('New request: Priced Ask') or '').endswith('Garden flower wall and Oh Baby neon sign · $329.00'), f'a priced request’s alert shows the price: {bodies.get("New request: Priced Ask")!r}')
 
 # Upgrading: upcoming requests from before get their package back from the notes, then their price. Past,
 # cancelled and declined bookings are left as they were.
@@ -705,20 +750,20 @@ def old_request(day, notes, items, status='requested'):
                        case when %s = 'requested' then now() + interval '3 days' end) returning id""", [status, day, day, notes, status]).fetchone()[0]
     x('insert into booking_items (booking_id, item_id) select %s, unnest(%s::text[])', [bid, items])
     return bid
-bridal = old_request('2028-03-01', 'Package: The Bridal Suite package\nPink and white please', ['ivory-wall', 'bloom-bar'])
-phoned = old_request('2028-03-02', 'Phone given with this request: 586-555-0123\nPackage: The Sweet Setup package', ['bloom-bar', 'sweets-cart'], status='confirmed')
+walled = old_request('2028-03-01', 'Package: The Neon Wall package\nPink and white please', ['ivory-wall', 'neon-engaged'])
+phoned = old_request('2028-03-02', 'Phone given with this request: 586-555-0123\nPackage: The Sign Pair package', ['neon-just-married', 'neon-engaged'], status='confirmed')
 plain = old_request('2028-03-03', 'No package here', ['greenery-wall'], status='confirmed')
-past = old_request((datetime.date.today() - datetime.timedelta(days=30)).isoformat(), 'Package: The Bridal Suite package', ['garden-wall', 'bloom-bar'], status='confirmed')
-gone = old_request('2028-03-01', 'Package: The Bridal Suite package', ['red-rose-wall', 'pedestals'], status='cancelled')
+past = old_request((datetime.date.today() - datetime.timedelta(days=30)).isoformat(), 'Package: The Neon Wall package', ['garden-wall', 'neon-oh-baby'], status='confirmed')
+gone = old_request('2028-03-01', 'Package: The Neon Wall package', ['red-rose-wall', 'neon-congrats'], status='cancelled')
 x(SCHEMA)
-got = {i: x('select price, packages from bookings where id = %s', [i]).fetchone() for i in (bridal, phoned, plain, past, gone)}
-got = {i: (None if pr is None else float(pr), pk) for i, (pr, pk) in got.items()}
-check(got[bridal] == (720.0, ['pkg-bridal-suite']), f'an old Bridal Suite request gets its package and $720, not $800: {got[bridal]}')
-check(got[phoned] == (600.0, ['pkg-sweet-setup']), f'the package is found when the notes start with another line: {got[phoned]}')
-check(got[plain] == (450.0, []), f'a booking without a package is priced from its items: {got[plain]}')
+got = {i: x('select price, packages from bookings where id = %s', [i]).fetchone() for i in (walled, phoned, plain, past, gone)}
+got = {i: (num(pr), pk) for i, (pr, pk) in got.items()}
+check(got[walled] == (300.0, ['pkg-wall-neon']), f'an old package request gets its package and saving back: {got[walled]}')
+check(got[phoned] == (50.0, ['pkg-signs']), f'the package is found when the notes start with another line: {got[phoned]}')
+check(got[plain] == (299.0, []), f'a booking without a package is priced from its items: {got[plain]}')
 check(got[past] == (None, []) and got[gone] == (None, []), f'past and cancelled bookings are left alone: {got[past]} {got[gone]}')
 x(SCHEMA)
-check(float(x('select price from bookings where id = %s', [bridal]).fetchone()[0]) == 720, 'running the schema again changes nothing')
+check(float(x('select price from bookings where id = %s', [walled]).fetchone()[0]) == 300, 'running the schema again changes nothing')
 
 print('\n' + ('ALL PASSED' if not failures else f'{len(failures)} FAILED'))
 conn.close()

@@ -10,7 +10,7 @@ These need real answers; nothing on the site should be guessed.
 2. **Contact details.** Confirm (586) 360-4200, hello@bloomevents.com and the bloomevents.com domain. Every booking request, the footer and the policy pages use them.
 3. **Social accounts.** The homepage structured data lists instagram.com/bloomevents and tiktok.com/@bloomevents, but no social links are shown. Confirm the real handles before linking them.
 4. **Reviews.** A reviews section would help, but only with real client reviews.
-5. **Neon signs and prices.** The nine signs can be booked like the walls (one of each), and every booking is priced from the catalog automatically. Confirm the prices (walls $450 each, neon signs $125, the package savings) since they now set each booking's price; custom-wording signs are still arranged through the notes. The supplied grids give about 360×450 px per photo, so the original photos would look sharper on large screens.
+5. **Prices.** The owner's starting prices are live (October 2026): flower walls $299, neon signs $30, white cylinder pillars $120 for a set of 3 or $200 for a set of 5, sweets cart $5.95 per guest. Still to come from her: the bloom bar's price (it shows "Price on request" and she prices those bookings herself), whether she wants any package deals back (her list mentioned a set of 5 pillars for $175 with a package), what a custom-wording neon sign costs, and whether the "Optional extras" prices on the Rentals page (signage, gifts table, florals, candles, rush booking) are right. The supplied grids give about 360×450 px per photo, so the original photos would look sharper on large screens.
 6. **Pedestal photos.** Captions on the homepage and gallery say "Retouched reference" and "reference". If these are Bloom's own pedestals, remove the labels; if they are stock photos, replace them.
 7. **Policy drafts.** Privacy, terms, booking and accessibility pages still show "For owner review" boxes. Deposit, refund and damage terms need confirming before launch.
 
@@ -33,4 +33,4 @@ Built: the Rentals page calendar, booked-item blocking on the Rentals and Book p
 
 ## Tests
 
-`tests/` has four browser checks: booking flow, availability calendar, the owner app, and every page at four widths with axe. See the Tests section of the README.
+`tests/` has the browser checks (booking flow, availability calendar, the owner app, every page at four widths with axe, the alerts function) and `tests/db/`, the database checks and the tools for updating the live database safely. See the Tests section of the README.

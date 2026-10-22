@@ -44,29 +44,47 @@ create table if not exists public.customers (
   created_at timestamptz not null default now()
 );
 
--- Everything that can be booked, with the price the Rentals page shows. Running this file again keeps prices
--- changed since (change one with: update public.items set price = 500 where id = 'ivory-wall';).
+-- Everything that can be booked, with the starting price the Rentals page shows. No price means it's priced on
+-- request; per_person prices are multiplied by the guest count. Running this file again keeps prices changed
+-- since (change one with: update public.items set price = 350 where id = 'ivory-wall';).
 create table if not exists public.items (
   id text primary key check (id ~ '^[a-z0-9-]+$'),
   name text not null check (char_length(name) between 1 and 100),
   kind text not null check (kind in ('wall', 'extra', 'neon')),
-  price numeric(10, 2) not null check (price >= 0),
+  price numeric(10, 2) check (price >= 0),
+  per_person boolean not null default false,
   sort int not null
 );
-insert into public.items (id, name, kind, price, sort) values
-  ('ivory-wall', 'Ivory flower wall', 'wall', 450, 1), ('garden-wall', 'Garden flower wall', 'wall', 450, 2),
-  ('pink-ombre-wall', 'Pink ombre wall', 'wall', 450, 3), ('red-rose-wall', 'Red rose wall', 'wall', 450, 4),
-  ('champagne-wall', 'Champagne rose wall', 'wall', 450, 5), ('greenery-wall', 'Greenery wall', 'wall', 450, 6),
-  ('ivory-texture-wall', 'Ivory textured wall', 'wall', 450, 7),
-  ('bloom-bar', 'Bloom bar', 'extra', 350, 8), ('pedestals', 'White pedestals', 'extra', 275, 9), ('sweets-cart', 'Sweets cart', 'extra', 325, 10),
-  ('neon-mr-and-mrs', 'Mr. & Mrs. neon sign', 'neon', 125, 11), ('neon-happy-birthday', 'Happy Birthday neon sign', 'neon', 125, 12),
-  ('neon-christening-day', 'Christening Day neon sign', 'neon', 125, 13), ('neon-congratulations', 'Congratulations neon sign', 'neon', 125, 14),
-  ('neon-oh-baby', 'Oh Baby neon sign', 'neon', 125, 15), ('neon-better-together', 'Better Together neon sign', 'neon', 125, 16),
-  ('neon-just-married', 'Just Married neon sign', 'neon', 125, 17), ('neon-engaged', 'Engaged neon sign', 'neon', 125, 18),
-  ('neon-congrats', 'Congrats neon sign', 'neon', 125, 19)
-on conflict (id) do update set name = excluded.name, kind = excluded.kind, sort = excluded.sort;
+alter table public.items alter column price drop not null;
+alter table public.items add column if not exists per_person boolean not null default false;
+insert into public.items (id, name, kind, price, per_person, sort) values
+  ('ivory-wall', 'Ivory flower wall', 'wall', 299, false, 1), ('garden-wall', 'Garden flower wall', 'wall', 299, false, 2),
+  ('pink-ombre-wall', 'Pink ombre wall', 'wall', 299, false, 3), ('red-rose-wall', 'Red rose wall', 'wall', 299, false, 4),
+  ('champagne-wall', 'Champagne rose wall', 'wall', 299, false, 5), ('greenery-wall', 'Greenery wall', 'wall', 299, false, 6),
+  ('ivory-texture-wall', 'Ivory textured wall', 'wall', 299, false, 7),
+  ('bloom-bar', 'Bloom bar', 'extra', null, false, 8), ('pedestals', 'White cylinder pillars', 'extra', 200, false, 9),
+  ('sweets-cart', 'Sweets cart', 'extra', 5.95, true, 10),
+  ('neon-mr-and-mrs', 'Mr. & Mrs. neon sign', 'neon', 30, false, 11), ('neon-happy-birthday', 'Happy Birthday neon sign', 'neon', 30, false, 12),
+  ('neon-christening-day', 'Christening Day neon sign', 'neon', 30, false, 13), ('neon-congratulations', 'Congratulations neon sign', 'neon', 30, false, 14),
+  ('neon-oh-baby', 'Oh Baby neon sign', 'neon', 30, false, 15), ('neon-better-together', 'Better Together neon sign', 'neon', 30, false, 16),
+  ('neon-just-married', 'Just Married neon sign', 'neon', 30, false, 17), ('neon-engaged', 'Engaged neon sign', 'neon', 30, false, 18),
+  ('neon-congrats', 'Congrats neon sign', 'neon', 30, false, 19)
+on conflict (id) do update set name = excluded.name, kind = excluded.kind, per_person = excluded.per_person, sort = excluded.sort;
+
+-- Items rented in sets of different sizes, priced by the size booked. There are 5 white pillars, so a booking
+-- takes a set of 3 or of 5 and the pillars are held as one item either way.
+create table if not exists public.item_sets (
+  item_id text not null references public.items,
+  size int not null check (size between 1 and 100),
+  price numeric(10, 2) not null check (price >= 0),
+  primary key (item_id, size)
+);
+insert into public.item_sets (item_id, size, price) values ('pedestals', 3, 120), ('pedestals', 5, 200)
+on conflict (item_id, size) do nothing;
 
 -- Packages: their items (and a flower wall of the customer's choice for some) for less than the items alone.
+-- None are offered right now; add one with an insert like
+--   insert into public.packages values ('pkg-name', 'The Name package', '{bloom-bar,sweets-cart}', false, 75, 1);
 create table if not exists public.packages (
   id text primary key check (id ~ '^pkg-[a-z0-9-]+$'),
   name text not null,
@@ -75,11 +93,6 @@ create table if not exists public.packages (
   saving numeric(10, 2) not null check (saving >= 0),
   sort int not null
 );
-insert into public.packages (id, name, parts, needs_wall, saving, sort) values
-  ('pkg-sweet-setup', 'The Sweet Setup package', '{bloom-bar,sweets-cart}', false, 75, 1),
-  ('pkg-bridal-suite', 'The Bridal Suite package', '{bloom-bar}', true, 80, 2),
-  ('pkg-full-bloom', 'The Full Bloom package', '{bloom-bar,pedestals,sweets-cart}', true, 150, 3)
-on conflict (id) do update set name = excluded.name, parts = excluded.parts, needs_wall = excluded.needs_wall, sort = excluded.sort;
 
 -- "requested" and "confirmed" bookings hold their items; the other statuses free them.
 create table if not exists public.bookings (
@@ -104,6 +117,8 @@ create table if not exists public.bookings (
 -- Website requests hold their items until hold_until unless the owner confirms or declines first.
 alter table public.bookings add column if not exists hold_until timestamptz;
 alter table public.bookings add column if not exists packages text[] not null default '{}';
+-- The size of the set for items rented in sets (the white pillars: 3 or 5).
+alter table public.bookings add column if not exists pillar_set smallint check (pillar_set in (3, 5));
 create index if not exists bookings_event_start on public.bookings (event_start);
 create index if not exists bookings_customer on public.bookings (customer_id);
 
@@ -171,12 +186,15 @@ grant execute on function private.expire_holds() to authenticated;
 
 alter table public.items enable row level security;
 alter table public.packages enable row level security;
-revoke all on public.items, public.packages from anon, authenticated;
-grant select on public.items, public.packages to anon, authenticated;
+alter table public.item_sets enable row level security;
+revoke all on public.items, public.packages, public.item_sets from anon, authenticated;
+grant select on public.items, public.packages, public.item_sets to anon, authenticated;
 drop policy if exists "Anyone can read items" on public.items;
 create policy "Anyone can read items" on public.items for select to anon, authenticated using (true);
 drop policy if exists "Anyone can read packages" on public.packages;
 create policy "Anyone can read packages" on public.packages for select to anon, authenticated using (true);
+drop policy if exists "Anyone can read item sets" on public.item_sets;
+create policy "Anyone can read item sets" on public.item_sets for select to anon, authenticated using (true);
 
 alter table public.settings enable row level security;
 alter table public.customers enable row level security;
@@ -199,21 +217,29 @@ drop policy if exists "Admins manage booking items" on public.booking_items;
 create policy "Admins manage booking items" on public.booking_items for all to authenticated
   using ((select private.is_admin())) with check ((select private.is_admin()));
 
--- The price of a booking: its items at catalog prices, less each package's saving when the booking has all of
--- that package's items (and a flower wall, for packages that include one). Packages don't share items: the
--- biggest saving is counted first and uses up its items. Unknown ids are ignored, and nothing picked has no price.
-create or replace function public.booking_quote(p_items text[], p_packages text[] default '{}') returns numeric
+-- The price of a booking: its items at catalog prices (per-person items times the guest count, items in sets at
+-- the price of the set size), less each package's saving when the booking has all of that package's items (and a
+-- flower wall, for packages that include one). Packages don't share items: the biggest saving is counted first
+-- and uses up its items. Unknown ids are ignored. There is no price when nothing is picked, when an item is
+-- priced on request, or when a per-person item has no guest count: the owner prices those herself.
+create or replace function public.booking_quote(p_items text[], p_packages text[] default '{}', p_guests int default null,
+  p_pillar_set int default null) returns numeric
 language plpgsql stable security invoker set search_path = ''
 as $$
 declare
   v_pool text[] := array(select distinct i.id from public.items i where i.id = any (coalesce(p_items, '{}')));
-  v_total numeric := coalesce((select sum(i.price) from public.items i where i.id = any (v_pool)), 0);
+  v_total numeric;
   v_wall text;
   pk record;
 begin
-  if cardinality(v_pool) = 0 then
+  if cardinality(v_pool) = 0
+     or exists (select 1 from public.items i where i.id = any (v_pool) and i.price is null)
+     or (exists (select 1 from public.items i where i.id = any (v_pool) and i.per_person) and coalesce(p_guests, 0) < 1) then
     return null;
   end if;
+  select sum(case when i.per_person then i.price * p_guests
+    else coalesce((select s.price from public.item_sets s where s.item_id = i.id and s.size = p_pillar_set), i.price) end)
+  into v_total from public.items i where i.id = any (v_pool);
   for pk in select * from public.packages p where p.id = any (coalesce(p_packages, '{}')) order by p.saving desc, p.sort loop
     continue when not pk.parts <@ v_pool;
     v_wall := null;
@@ -227,8 +253,8 @@ begin
   return greatest(v_total, 0);
 end
 $$;
-revoke all on function public.booking_quote(text[], text[]) from public;
-grant execute on function public.booking_quote(text[], text[]) to anon, authenticated;
+revoke all on function public.booking_quote(text[], text[], int, int) from public;
+grant execute on function public.booking_quote(text[], text[], int, int) to anon, authenticated;
 
 -- What the owner app reads. security_invoker keeps the tables' admin-only rules in force.
 create or replace view public.owner_bookings with (security_invoker = true) as
@@ -240,7 +266,8 @@ select b.id, b.status, b.source, b.event_start, b.event_end,
   array(select i.item_id from public.booking_items i where i.booking_id = b.id order by i.item_id) as items,
   b.hold_until,
   b.packages,
-  public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages) as item_price
+  public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages, b.guests, b.pillar_set) as item_price,
+  b.pillar_set
 from public.bookings b
 left join public.customers c on c.id = b.customer_id;
 
@@ -254,6 +281,8 @@ group by c.id;
 
 revoke all on public.owner_bookings, public.owner_customers from anon, authenticated;
 grant select on public.owner_bookings, public.owner_customers to authenticated;
+-- The two-argument quote from before guests and pillar sets (the view above no longer uses it).
+drop function if exists public.booking_quote(text[], text[]);
 
 -- Saves a booking with its customer and items in one step. Dates and times are Detroit wall-clock;
 -- an end time at or before the start time means the event ends the next day.
@@ -272,6 +301,8 @@ declare
   v_items text[] := array(select distinct jsonb_array_elements_text(coalesce(b -> 'items', '[]'::jsonb)));
   v_packages text[] := array(select p.id from public.packages p
     where p.id in (select jsonb_array_elements_text(coalesce(b -> 'packages', '[]'::jsonb))) order by p.sort);
+  v_guests int := nullif(b ->> 'guests', '')::int;
+  v_pillar_set int := case when 'pedestals' = any (v_items) then nullif(b ->> 'pillar_set', '')::int end;
   v_price numeric;
   v_start timestamptz;
   v_end timestamptz;
@@ -281,7 +312,7 @@ begin
     raise exception 'Not allowed' using errcode = '42501';
   end if;
   -- An app opened before an update may not show every item, and saving would drop the ones it doesn't show.
-  if coalesce(nullif(b ->> 'form_version', '')::int, 1) < 2 then
+  if coalesce(nullif(b ->> 'form_version', '')::int, 1) < 3 then
     raise exception 'This app is out of date. Close it fully and open it again.' using errcode = 'P0001';
   end if;
   perform private.expire_holds();
@@ -313,21 +344,21 @@ begin
   end if;
 
   -- A price left empty is worked out from the items and packages.
-  v_price := coalesce(nullif(b ->> 'price', '')::numeric, public.booking_quote(v_items, v_packages));
+  v_price := coalesce(nullif(b ->> 'price', '')::numeric, public.booking_quote(v_items, v_packages, v_guests, v_pillar_set));
 
   -- Drop removed items before new times apply, so a removed item can't cause a false conflict.
   delete from public.booking_items where booking_id = v_id and item_id <> all (v_items);
   if v_id is null then
-    insert into public.bookings (customer_id, status, event_start, event_end, setup_minutes, pickup_minutes, address, venue, event_type, guests, price, packages, deposit_paid, notes)
+    insert into public.bookings (customer_id, status, event_start, event_end, setup_minutes, pickup_minutes, address, venue, event_type, guests, price, packages, pillar_set, deposit_paid, notes)
     values (v_customer, v_status, v_start, v_end, v_setup, v_pickup, nullif(trim(b ->> 'address'), ''), nullif(trim(b ->> 'venue'), ''),
-      nullif(b ->> 'event_type', ''), nullif(b ->> 'guests', '')::int, v_price, v_packages,
+      nullif(b ->> 'event_type', ''), v_guests, v_price, v_packages, v_pillar_set,
       coalesce((b ->> 'deposit_paid')::boolean, false), nullif(trim(b ->> 'notes'), ''))
     returning id into v_id;
   else
     update public.bookings
     set customer_id = v_customer, status = v_status, event_start = v_start, event_end = v_end, setup_minutes = v_setup, pickup_minutes = v_pickup,
       address = nullif(trim(b ->> 'address'), ''), venue = nullif(trim(b ->> 'venue'), ''), event_type = nullif(b ->> 'event_type', ''),
-      guests = nullif(b ->> 'guests', '')::int, price = v_price, packages = v_packages,
+      guests = v_guests, price = v_price, packages = v_packages, pillar_set = v_pillar_set,
       deposit_paid = coalesce((b ->> 'deposit_paid')::boolean, false), notes = nullif(trim(b ->> 'notes'), ''),
       hold_until = null
     where id = v_id;
@@ -442,6 +473,7 @@ declare
   v_id bigint;
   v_taken text[];
   v_packages text[];
+  v_pillar_set int;
 begin
   -- The trap field is hidden from people, so only bots fill it in: report success and save nothing.
   if coalesce(r ->> 'trap', '') <> '' then
@@ -454,6 +486,7 @@ begin
     v_items := array(select distinct jsonb_array_elements_text(coalesce(r -> 'items', '[]'::jsonb)));
     v_packages := array(select p.id from public.packages p
       where p.id in (select jsonb_array_elements_text(coalesce(r -> 'packages', '[]'::jsonb))) order by p.sort);
+    v_pillar_set := case when 'pedestals' = any (v_items) then nullif(r ->> 'pillar_set', '')::int end;
   exception when others then
     raise exception 'invalid_request' using errcode = '22023';
   end;
@@ -509,9 +542,10 @@ begin
     if v_customer is null then
       insert into public.customers (name, phone, email) values (v_name, v_phone, v_email) returning id into v_customer;
     end if;
-    insert into public.bookings (customer_id, status, source, event_start, event_end, setup_minutes, pickup_minutes, hold_until, address, venue, event_type, guests, notes, packages, price)
+    insert into public.bookings (customer_id, status, source, event_start, event_end, setup_minutes, pickup_minutes, hold_until, address, venue, event_type, guests, notes, packages, pillar_set, price)
     values (v_customer, 'requested', 'website', v_start, v_end, v_rules.setup_minutes, v_rules.pickup_minutes, v_hold,
-      v_address, v_venue, v_type, nullif(v_guests, '')::int, v_notes, v_packages, public.booking_quote(v_items, v_packages))
+      v_address, v_venue, v_type, nullif(v_guests, '')::int, v_notes, v_packages, v_pillar_set,
+      public.booking_quote(v_items, v_packages, nullif(v_guests, '')::int, v_pillar_set))
     returning id into v_id;
     -- The conflict target matters: without it an overlap would be skipped silently instead of refused.
     insert into public.booking_items (booking_id, item_id) select v_id, unnest(v_items) on conflict (booking_id, item_id) do nothing;
@@ -837,7 +871,7 @@ set packages = array(select p.id from public.packages p
 where b.price is null and b.status in ('requested', 'confirmed') and b.event_end > now()
   and b.source = 'website' and cardinality(b.packages) = 0 and b.notes ~ '(?:^|\n)Package: ';
 update public.bookings b
-set price = public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages)
+set price = public.booking_quote(array(select i.item_id from public.booking_items i where i.booking_id = b.id), b.packages, b.guests, b.pillar_set)
 where b.price is null and b.status in ('requested', 'confirmed') and b.event_end > now();
 
 -- Every 15 minutes, expire website holds that ran out, and every 5 minutes retry alerts that didn't go out.

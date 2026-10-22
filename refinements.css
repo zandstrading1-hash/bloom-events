@@ -939,3 +939,11 @@ a[href^="tel:"] { white-space: nowrap; }
   .neon-pick-label { bottom: .4rem; padding: .22rem .6rem; font-size: .75rem; }
   .neon-card .pick-note { font-size: .6875rem; }
 }
+
+/* Prices: the "starting prices" line, the pillar set on the Book page, the guest count hint */
+.page-hero-note { margin: .75rem 0 0; font-size: .9375rem; color: var(--ink-muted); }
+.rental-note { margin: 1.25rem 0 0; font-size: .875rem; color: var(--ink-muted); }
+.picks-list li { flex-wrap: wrap; }
+.pick-set { order: 3; flex-basis: 100%; display: flex; align-items: center; gap: .4rem; font-size: .875rem; color: var(--ink); }
+.pick-set select { min-height: 36px; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+.field-hint { font-size: .8125rem; color: var(--ink-muted); }

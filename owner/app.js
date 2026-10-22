@@ -4,7 +4,7 @@
   const { RENTALS, DB, listNames } = window.BloomEvents;
   const ITEMS = Object.keys(RENTALS).filter(id => !id.startsWith('pkg-'));
   const itemName = id => RENTALS[id] || id;
-  const itemList = ids => ITEMS.filter(id => ids.includes(id)).map(itemName).join(', ');
+  const itemList = (ids, pillarSet) => ITEMS.filter(id => ids.includes(id)).map(id => id === 'pedestals' && pillarSet ? `${itemName(id)} (set of ${pillarSet})` : itemName(id)).join(', ');
   const TZ = 'America/Detroit';
   const $ = id => document.getElementById(id);
   const el = (tag, attrs = {}, ...kids) => {
@@ -131,6 +131,7 @@
   };
 
   let settings = { setup_minutes: 120, pickup_minutes: 120, hold_hours: 72 };
+  let packageNames = {};
   const start = async () => {
     try {
       const allowed = await rpc('am_i_admin', {});
@@ -306,7 +307,7 @@
         db(`/rest/v1/owner_bookings?select=*&status=in.(requested,confirmed)&start_local=lt.${info.endStr.slice(0, 19)}&end_local=gt.${info.startStr.slice(0, 19)}&order=start_local,id`)
           .then(rows => success(rows.map(row => ({
             id: String(row.id),
-            title: `${row.customer_name || 'No name'} · ${itemList(row.items)}`,
+            title: `${row.customer_name || 'No name'} · ${itemList(row.items, row.pillar_set)}`,
             start: row.start_local,
             end: row.end_local,
             classNames: [`status-${row.status}`],
@@ -340,8 +341,8 @@
     const facts = el('dl', { class: 'facts' },
       fact('When', whenText(row)),
       fact('Setup and pickup', `Setup from ${timeText(shift(row.start_local, -row.setup_minutes))}, pickup by ${timeText(shift(row.end_local, row.pickup_minutes))}`),
-      fact('Items', itemList(row.items)),
-      row.packages && row.packages.length > 0 && fact('Package', listNames(row.packages.map(itemName))),
+      fact('Items', itemList(row.items, row.pillar_set)),
+      row.packages && row.packages.length > 0 && fact('Package', listNames(row.packages.map(id => packageNames[id] || itemName(id)))),
       row.address && fact('Address', el('a', { href: `https://maps.apple.com/?q=${encodeURIComponent(row.address)}`, target: '_blank', rel: 'noopener', text: row.address })),
       row.venue && fact('Venue', row.venue),
       (row.event_type || row.guests) && fact('Event', [row.event_type, row.guests && `${row.guests} guests`].filter(Boolean).join(' · ')),
@@ -412,34 +413,54 @@
       el('span', {}, p.name, el('small', { class: 'sub', text: `Save ${money(p.saving)} with ${listNames([...(p.needs_wall ? ['a flower wall'] : []), ...p.parts.map(itemName)])}` }))))));
     $('f-packages-group').hidden = !list.length;
     packagesLoaded = true;
+    packageNames = Object.fromEntries(list.map(p => [p.id, p.name]));
   };
   const loadPackages = () => db('/rest/v1/packages?select=id,name,parts,needs_wall,saving&order=sort').then(renderPackages).catch(() => {});
 
-  /* Price: worked out from the items and package by the database, unless she types her own. A worked-out
-     price is saved empty, so the database prices exactly what is saved. */
+  // The pillars go out as a set of 3 or 5; the set is chosen once the pillars are ticked.
+  const pillarsChosen = () => chosen(boxes()).includes('pedestals');
+  const paintPillarSet = () => { $('f-pillar-set-field').hidden = !pillarsChosen(); };
+
+  /* Price: worked out from the items (the sweets cart per guest, the pillars by set) by the database, unless she
+     types her own. A worked-out price is saved empty, so the database prices exactly what is saved. itemPrice is
+     undefined until known, and null when the items can't be priced automatically. */
   let priceAuto = true;
-  let itemPrice = null;
+  let itemPrice;
   let quoteId = 0;
+  const noPriceReason = () => {
+    const items = chosen(boxes());
+    if (!items.length) return 'Fills in as you choose items.';
+    if (items.includes('bloom-bar')) return 'The bloom bar is priced on request, so type the price.';
+    if (items.includes('sweets-cart') && !(Number(f('guests').value) >= 1)) return 'Add the guest count to price the sweets cart.';
+    return '';
+  };
   const paintPrice = () => {
     const hint = $('price-hint');
-    if (itemPrice === null) hint.replaceChildren();
-    else if (priceAuto) hint.replaceChildren(itemPrice ? 'Worked out from the items and package. Change it for extras or a different deal.' : 'Fills in as you choose items.');
+    if (itemPrice === undefined) hint.replaceChildren();
+    else if (itemPrice === null) hint.replaceChildren(priceAuto ? noPriceReason() : 'Your own price.');
+    else if (priceAuto) hint.replaceChildren('Worked out from the item prices. Change it for extras or a special deal.');
     else hint.replaceChildren('Your own price. ', el('button', { type: 'button', class: 'link', text: `Use the item prices (${money(itemPrice)})`,
-      onclick: () => { priceAuto = true; f('price').value = itemPrice ? itemPrice.toFixed(2) : ''; paintPrice(); } }));
+      onclick: () => { priceAuto = true; f('price').value = itemPrice.toFixed(2); paintPrice(); } }));
   };
   const updatePrice = debounce(async () => {
     const id = ++quoteId;
     try {
-      const total = Number(await rpc('booking_quote', { p_items: chosen(boxes()), p_packages: packagesChosen() }));
+      const total = await rpc('booking_quote', { p_items: chosen(boxes()), p_packages: packagesChosen(),
+        p_guests: Number(f('guests').value) || null, p_pillar_set: pillarsChosen() ? Number(f('pillar-set').value) : null });
       if (id !== quoteId) return;
-      itemPrice = total;
-      if (priceAuto) f('price').value = total ? total.toFixed(2) : '';
+      itemPrice = total == null ? null : Number(total);
+      if (priceAuto) f('price').value = itemPrice ? itemPrice.toFixed(2) : '';
       paintPrice();
     } catch { /* a price left empty is worked out when the booking is saved */ }
   }, 200);
+  const reprice = () => { quoteId++; updatePrice(); };
   f('price').addEventListener('input', () => { priceAuto = f('price').value === ''; paintPrice(); });
   f('price').addEventListener('change', () => { if (priceAuto && itemPrice) f('price').value = itemPrice.toFixed(2); });
-  form.addEventListener('change', e => { if (e.target.name === 'items' || e.target.name === 'packages') { quoteId++; updatePrice(); } });
+  f('guests').addEventListener('input', reprice);
+  form.addEventListener('change', e => {
+    if (e.target.name === 'items') paintPillarSet();
+    if (['items', 'packages'].includes(e.target.name) || e.target === f('pillar-set')) reprice();
+  });
 
   const pick = customer => {
     pickedCustomer = customer && customer.id ? customer : null;
@@ -483,9 +504,11 @@
     f('venue').value = (row && row.venue) || '';
     f('type').value = (row && row.event_type) || '';
     f('guests').value = (row && row.guests) || '';
-    // A saved price that matches its items and package stays worked out; any other is her own.
-    itemPrice = row && row.item_price != null ? Number(row.item_price) : null;
-    priceAuto = !row || row.price == null || Number(row.price) === itemPrice;
+    f('pillar-set').value = row && row.pillar_set ? String(row.pillar_set) : '3';
+    paintPillarSet();
+    // A saved price that matches what its items come to stays worked out; any other is her own.
+    itemPrice = row ? (row.item_price == null ? null : Number(row.item_price)) : undefined;
+    priceAuto = !row || row.price == null || (itemPrice != null && Number(row.price) === itemPrice);
     f('price').value = row && !priceAuto ? Number(row.price).toFixed(2) : itemPrice ? itemPrice.toFixed(2) : '';
     quoteId++;
     paintPrice();
@@ -555,8 +578,9 @@
         setup_minutes: f('setup').value, pickup_minutes: f('pickup').value,
         items,
         address: f('address').value, venue: f('venue').value, event_type: f('type').value, guests: f('guests').value,
-        price: priceAuto ? '' : f('price').value, packages: packagesChosen(), deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value,
-        form_version: 2
+        price: priceAuto ? '' : f('price').value, packages: packagesChosen(), pillar_set: pillarsChosen() ? f('pillar-set').value : '',
+        deposit_paid: f('deposit').checked, status: f('status').value, notes: f('notes').value,
+        form_version: 3
       } });
       close(formDialog);
       toast(editing ? 'Booking updated' : 'Booking saved');
@@ -579,7 +603,7 @@
     el('span', {},
       el('span', { class: 'line1' }, row.customer_name || 'No name', badge(row.status)),
       el('span', { class: 'sub', text: whenText(row) }),
-      el('span', { class: 'sub', text: [itemList(row.items), row.price != null && money(row.price)].filter(Boolean).join(' · ') }),
+      el('span', { class: 'sub', text: [itemList(row.items, row.pillar_set), row.price != null && money(row.price)].filter(Boolean).join(' · ') }),
       row.address && el('span', { class: 'sub', text: row.address }),
       row.status === 'requested' && row.source === 'website' && el('span', { class: 'sub request', text: `Website request${row.hold_until ? ` · holding until ${instantText(row.hold_until)}` : ''}` }))));
   const loadBookings = async reset => {

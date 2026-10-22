@@ -169,7 +169,7 @@
     'greenery-wall': 'Greenery wall',
     'ivory-texture-wall': 'Ivory textured wall',
     'bloom-bar': 'Bloom bar',
-    'pedestals': 'White pedestals',
+    'pedestals': 'White cylinder pillars',
     'sweets-cart': 'Sweets cart',
     'neon-mr-and-mrs': 'Mr. & Mrs. neon sign',
     'neon-happy-birthday': 'Happy Birthday neon sign',
@@ -179,17 +179,11 @@
     'neon-better-together': 'Better Together neon sign',
     'neon-just-married': 'Just Married neon sign',
     'neon-engaged': 'Engaged neon sign',
-    'neon-congrats': 'Congrats neon sign',
-    'pkg-sweet-setup': 'The Sweet Setup package',
-    'pkg-bridal-suite': 'The Bridal Suite package',
-    'pkg-full-bloom': 'The Full Bloom package'
+    'neon-congrats': 'Congrats neon sign'
   };
-  // Packages are booked as their parts; the wall in a package is picked separately.
-  const PARTS = {
-    'pkg-sweet-setup': ['bloom-bar', 'sweets-cart'],
-    'pkg-bridal-suite': ['bloom-bar'],
-    'pkg-full-bloom': ['bloom-bar', 'pedestals', 'sweets-cart']
-  };
+  // Packages are booked as their parts (package id: [part ids]); the wall in a package is picked separately.
+  // No package deals are offered right now.
+  const PARTS = {};
   const WALLS = Object.keys(RENTALS).filter(id => id.endsWith('-wall'));
   const ITEMS = Object.keys(RENTALS).filter(id => !PARTS[id]);
   // The publishable key is meant to be public: it can only read when items are held (never names) and send booking requests.
@@ -203,6 +197,13 @@
   const fromLink = params.get('picks');
   if (fromLink) picks = clean([...picks, ...fromLink.split(',')]);
   const store = () => { try { localStorage.setItem(PICKS_KEY, JSON.stringify(picks)); } catch { /* storage blocked: the Book link still carries the picks */ } };
+  const PILLAR_KEY = 'bloom-pillar-set';
+  const validSet = s => ['3', '5'].includes(String(s)) ? String(s) : '';
+  let pillarSet = '3';
+  try { pillarSet = validSet(localStorage.getItem(PILLAR_KEY)) || pillarSet; } catch { /* storage blocked */ }
+  pillarSet = validSet(params.get('pillars')) || pillarSet;
+  const storePillars = () => { try { localStorage.setItem(PILLAR_KEY, pillarSet); } catch { /* the Book link still carries it */ } };
+  const pickName = id => id === 'pedestals' ? `${RENTALS[id]} (set of ${pillarSet})` : RENTALS[id];
 
   // The event date and times travel with the picks, chosen on the Rentals calendar or the Book form.
   const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -236,7 +237,8 @@
   const timesInOrder = () => Boolean(chosenStart && chosenEnd && (chosenEnd > chosenStart || NEXT_DAY.includes(chosenEnd)));
   const hasTimes = () => Boolean(chosenDate && timesInOrder());
   const bookHref = () => {
-    const query = [picks.length && `picks=${picks.join(',')}`, chosenDate && `date=${chosenDate}`, chosenStart && chosenEnd && `time=${chosenStart}-${chosenEnd}`].filter(Boolean).join('&');
+    const query = [picks.length && `picks=${picks.join(',')}`, picks.includes('pedestals') && `pillars=${pillarSet}`, chosenDate && `date=${chosenDate}`,
+      chosenStart && chosenEnd && `time=${chosenStart}-${chosenEnd}`].filter(Boolean).join('&');
     return query ? `contact.html?${query}` : 'contact.html';
   };
   const fillTimes = (select, end) => {
@@ -434,6 +436,18 @@
         remove.setAttribute('aria-label', `Remove ${RENTALS[id]}`);
         remove.textContent = 'Remove';
         li.append(name, taken, remove);
+        if (id === 'pedestals') {
+          const label = document.createElement('label');
+          label.className = 'pick-set';
+          label.append('Set of ');
+          const select = document.createElement('select');
+          select.id = 'pillar-set';
+          select.setAttribute('aria-label', 'How many pillars');
+          [['3', '3 (from $120)'], ['5', '5 (from $200)']].forEach(([value, text]) => select.append(new Option(text, value, false, value === pillarSet)));
+          select.addEventListener('change', () => { pillarSet = select.value; storePillars(); renderPicks(); });
+          label.append(select);
+          name.after(label);
+        }
         return li;
       }));
       const empty = document.getElementById('picks-empty');
@@ -441,7 +455,12 @@
       const more = document.getElementById('picks-more');
       if (more) more.textContent = picks.length ? 'Add more rentals' : 'Browse rentals';
       const field = document.getElementById('rentals-field');
-      if (field) field.value = picks.map(id => RENTALS[id]).join(', ');
+      if (field) field.value = picks.map(pickName).join(', ');
+      // The sweets cart is priced per guest, so the guest count is needed with it.
+      const guests = document.getElementById('guests');
+      const guestsHint = document.getElementById('guests-hint');
+      if (guests) guests.required = picks.includes('sweets-cart');
+      if (guestsHint) guestsHint.hidden = !picks.includes('sweets-cart');
     }
     paintAvailability();
   };
@@ -586,7 +605,7 @@
       line('Name', 'name'), line('Date', 'event_date'), hasTimes() ? `Time: ${timeLabel(chosenStart)} to ${timeLabel(chosenEnd)}` : '',
       line('Email', 'email'), line('Phone', 'phone'), line('Celebrating', 'event_type'), line('Guests', 'guests'),
       line('Venue', 'venue'), line('Address', 'address'),
-      picks.length ? `Picks: ${picks.map(id => RENTALS[id]).join(', ')}` : '',
+      picks.length ? `Picks: ${picks.map(pickName).join(', ')}` : '',
       line('Notes', 'message')].filter(Boolean).join('\n');
   };
   [['send-text', () => `sms:+15863604200?&body=${encodeURIComponent(summary())}`],
@@ -617,6 +636,7 @@
         date: value('event_date'), start: value('event_start'), end: value('event_end'), items,
         event_type: value('event_type'), guests: value('guests'), venue: value('venue'), address: value('address'),
         packages: picks.filter(id => PARTS[id]),
+        pillar_set: items.includes('pedestals') ? pillarSet : '',
         notes: [packages.length && `Package: ${packages.join(', ')}`, value('message')].filter(Boolean).join('\n'),
         trap: value('botcheck')
       } }, 15000);
