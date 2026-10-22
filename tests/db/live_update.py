@@ -5,7 +5,9 @@ upgraded by running the whole new schema.
     python tests/db/live_update.py <live-schema.sql> <new-schema.sql> <out-update.sql> [one-off.sql]
 
 The optional one-off file holds statements that belong only to this update (for example new prices, which running
-schema.sql again must not overwrite); they are added to the end of the update and run after the full schema too.
+schema.sql again must not overwrite). They run after the schema changes but before schema.sql's backfills of existing
+bookings (its `update public.bookings` statements), so those are priced with the new prices; the comparison database
+runs the whole schema in that same order.
 Prints the update's size and the SHA-256 of its whitespace-collapsed text, to check against the editor before Run.
 """
 import hashlib, pathlib, re, sys
@@ -53,7 +55,11 @@ oneoff_text = read(sys.argv[4]) if len(sys.argv) > 4 else ''
 for literal in re.findall(r"'(?:[^']|'')*'", strip_comments(new_text + '\n' + oneoff_text)):
     assert '  ' not in literal and '\n' not in literal, literal  # collapsing whitespace must not change a string
 live = set(statements(strip_comments(live_text)))
-delta = [s for s in statements(strip_comments(new_text)) if s not in live] + statements(strip_comments(oneoff_text))
+is_backfill = lambda s: s.startswith('update public.bookings ')
+new_all = statements(strip_comments(new_text))
+oneoff = statements(strip_comments(oneoff_text))
+changed = [s for s in new_all if s not in live]
+delta = [s for s in changed if not is_backfill(s)] + oneoff + [s for s in changed if is_backfill(s)]
 pathlib.Path(sys.argv[3]).write_text('\n'.join(delta) + '\n', encoding='utf-8', newline='\n')
 norm = ' '.join(' '.join(delta).split())
 print(f'update: {len(delta)} statements, {len(norm)} chars, sha256 {hashlib.sha256(norm.encode()).hexdigest()}')
@@ -63,6 +69,8 @@ live_seed = """
 insert into public.customers (name) values ('Seed');
 insert into public.bookings (customer_id, event_start, event_end) values ((select id from public.customers limit 1), '2027-03-01 10:00-05', '2027-03-01 12:00-05');
 insert into public.booking_items (booking_id, item_id) values ((select max(id) from public.bookings), 'garden-wall');
+insert into public.bookings (customer_id, event_start, event_end, guests) values ((select id from public.customers limit 1), '2027-03-02 10:00-05', '2027-03-02 12:00-05', 10);
+insert into public.booking_items (booking_id, item_id) values ((select max(id) from public.bookings), 'sweets-cart'), ((select max(id) from public.bookings), 'ivory-wall');
 """
 
 
@@ -76,7 +84,7 @@ def database(scripts):
 
 
 a = database([live_text, live_seed, '\n'.join(delta)])
-b = database([live_text, live_seed, new_text, oneoff_text])
+b = database([live_text, live_seed, '\n'.join(s for s in new_all if not is_backfill(s)), '\n'.join(oneoff), '\n'.join(s for s in new_all if is_backfill(s))])
 
 SNAP = {
     'functions': "select n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public', 'private') order by 1",
@@ -90,6 +98,7 @@ SNAP = {
     'triggers': "select tgrelid::regclass::text || ' ' || tgname, pg_get_triggerdef(oid) from pg_trigger where not tgisinternal order by 1",
     'catalog rows': "select to_jsonb(i)::text, '' from public.items i union all select to_jsonb(p)::text, '' from public.packages p order by 1",
     'booking prices': "select id::text, to_jsonb(b)::text from public.bookings b order by 1",
+    'catalog prices': "select id, coalesce(price::text, 'on request') from public.items order by 1",
 }
 different = 0
 for name, sql in SNAP.items():

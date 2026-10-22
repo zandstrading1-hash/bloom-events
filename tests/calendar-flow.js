@@ -167,7 +167,14 @@ const requests = s => s.log.filter(l => l.path.endsWith('/rpc/request_booking'))
   await p.goto(`${BASE}/contact.html?picks=pedestals,sweets-cart&pillars=5&date=${G}&time=13:00-15:00`, { waitUntil: 'networkidle' });
   assert(await p.inputValue('#pillar-set') === '5' && (await p.textContent('#picks-list')).includes('White cylinder pillars'), 'the pillar set from the link is chosen on the Book page');
   assert(await p.isVisible('#guests-hint') && await p.evaluate(() => document.getElementById('guests').required), 'with the sweets cart, the guest count is asked for');
-  await p.selectOption('#pillar-set', '3');
+  assert(await p.textContent('label[for="guests"]') === 'Guest count *', 'the guest count is marked as needed');
+  await p.focus('#pillar-set');
+  await p.keyboard.press('ArrowUp');
+  assert(await p.inputValue('#pillar-set') === '3' && await p.evaluate(() => document.activeElement && document.activeElement.id) === 'pillar-set',
+    'changing the set with the keyboard keeps focus on it');
+  await p.goto(`${BASE}/services.html`, { waitUntil: 'networkidle' });
+  await p.goto(`${BASE}/contact.html?date=${G}&time=13:00-15:00`, { waitUntil: 'networkidle' });
+  assert(await p.inputValue('#pillar-set') === '3', 'the set chosen on the Book page is remembered');
   assert(await p.inputValue('#rentals-field') === 'White cylinder pillars (set of 3), Sweets cart', 'the picks name the set: ' + await p.inputValue('#rentals-field'));
   await p.fill('#name', 'Pillar Person');
   await p.fill('#email', 'pillar@example.com');

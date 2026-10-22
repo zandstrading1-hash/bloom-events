@@ -4,6 +4,6 @@
 update public.items set price = 299 where kind = 'wall';
 update public.items set price = 30 where kind = 'neon';
 update public.items set price = null where id = 'bloom-bar';
-update public.items set price = 200 where id = 'pedestals';
+update public.items set price = 120 where id = 'pedestals';
 update public.items set price = 5.95 where id = 'sweets-cart';
 delete from public.packages where id in ('pkg-sweet-setup', 'pkg-bridal-suite', 'pkg-full-bloom');

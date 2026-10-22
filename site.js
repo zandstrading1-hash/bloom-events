@@ -203,6 +203,7 @@
   try { pillarSet = validSet(localStorage.getItem(PILLAR_KEY)) || pillarSet; } catch { /* storage blocked */ }
   pillarSet = validSet(params.get('pillars')) || pillarSet;
   const storePillars = () => { try { localStorage.setItem(PILLAR_KEY, pillarSet); } catch { /* the Book link still carries it */ } };
+  storePillars();
   const pickName = id => id === 'pedestals' ? `${RENTALS[id]} (set of ${pillarSet})` : RENTALS[id];
 
   // The event date and times travel with the picks, chosen on the Rentals calendar or the Book form.
@@ -442,9 +443,9 @@
           label.append('Set of ');
           const select = document.createElement('select');
           select.id = 'pillar-set';
-          select.setAttribute('aria-label', 'How many pillars');
           [['3', '3 (from $120)'], ['5', '5 (from $200)']].forEach(([value, text]) => select.append(new Option(text, value, false, value === pillarSet)));
-          select.addEventListener('change', () => { pillarSet = select.value; storePillars(); renderPicks(); });
+          // Re-rendering replaces the select, so focus goes back to the new one.
+          select.addEventListener('change', () => { pillarSet = select.value; storePillars(); renderPicks(); document.getElementById('pillar-set').focus(); });
           label.append(select);
           name.after(label);
         }
@@ -460,6 +461,8 @@
       const guests = document.getElementById('guests');
       const guestsHint = document.getElementById('guests-hint');
       if (guests) guests.required = picks.includes('sweets-cart');
+      const guestsLabel = document.querySelector('label[for="guests"]');
+      if (guestsLabel) guestsLabel.textContent = picks.includes('sweets-cart') ? 'Guest count *' : 'Guest count';
       if (guestsHint) guestsHint.hidden = !picks.includes('sweets-cart');
     }
     paintAvailability();

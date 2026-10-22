@@ -25,7 +25,7 @@ const ALERT_KEY = crypto.createECDH('prime256v1').generateKeys().toString('base6
 
 // Catalog prices as in supabase/schema.sql (null: priced on request), and the same pricing rule as booking_quote().
 const PRICES = { 'ivory-wall': 299, 'garden-wall': 299, 'pink-ombre-wall': 299, 'red-rose-wall': 299, 'champagne-wall': 299, 'greenery-wall': 299, 'ivory-texture-wall': 299,
-  'bloom-bar': null, 'pedestals': 200, 'sweets-cart': 5.95 };
+  'bloom-bar': null, 'pedestals': 120, 'sweets-cart': 5.95 };
 ['mr-and-mrs', 'happy-birthday', 'christening-day', 'congratulations', 'oh-baby', 'better-together', 'just-married', 'engaged', 'congrats'].forEach(s => { PRICES[`neon-${s}`] = 30; });
 const PER_PERSON = ['sweets-cart'];
 const SETS = { pedestals: { 3: 120, 5: 200 } };
@@ -157,7 +157,7 @@ const fakeSupabase = async (ctx, { admin = true, refreshOk = true, extra = [], p
       const fields = { name: b.customer_name.trim(), phone: b.customer_phone.trim() || null, email: b.customer_email.trim().toLowerCase() || null };
       if (customerId) Object.assign(s.customers.find(c => c.id === customerId), fields);
       else { customerId = s.next++; s.customers.push({ id: customerId, ...fields, notes: null, created_at: new Date().toISOString() }); }
-      const row = { customer_id: customerId, status: b.status, start_local: p.startLocal, end_local: p.endLocal, setup_minutes: Number(b.setup_minutes), pickup_minutes: Number(b.pickup_minutes), address: b.address || null, venue: b.venue || null, event_type: b.event_type || null, guests: b.guests ? Number(b.guests) : null, price: b.price === '' ? quote(b.items, b.packages || [], b.guests ? Number(b.guests) : null, b.items.includes('pedestals') ? Number(b.pillar_set) || null : null) : Number(b.price), packages: b.packages || [], pillar_set: b.items.includes('pedestals') ? Number(b.pillar_set) || null : null, deposit_paid: b.deposit_paid, notes: b.notes || null, items: b.items };
+      const row = { customer_id: customerId, status: b.status, start_local: p.startLocal, end_local: p.endLocal, setup_minutes: Number(b.setup_minutes), pickup_minutes: Number(b.pickup_minutes), address: b.address || null, venue: b.venue || null, event_type: b.event_type || null, guests: b.guests ? Number(b.guests) : null, price: b.price === '' ? quote(b.items, b.packages || [], b.guests ? Number(b.guests) : null, b.items.includes('pedestals') ? Number(b.pillar_set) || 3 : null) : Number(b.price), packages: b.packages || [], pillar_set: b.items.includes('pedestals') ? Number(b.pillar_set) || 3 : null, deposit_paid: b.deposit_paid, notes: b.notes || null, items: b.items };
       if (b.id) Object.assign(s.bookings.find(x => x.id === b.id), row); else s.bookings.push({ id: s.next++, ...row });
       return json(route, 200, b.id || s.next - 1);
     }

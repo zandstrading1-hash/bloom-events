@@ -566,8 +566,8 @@ prices = {i: None if pr is None else float(pr) for i, _, pr, _ in catalog}
 check(len(catalog) == 19 and len(kinds['wall']) == 7 and kinds['extra'] == ['bloom-bar', 'pedestals', 'sweets-cart'] and len(kinds['neon']) == 9,
       f'catalog: 7 walls, 3 extras and 9 neon signs: {[i for i, _, _, _ in catalog]}')
 check(all(prices[w] == 299 for w in kinds['wall']) and all(prices[n] == 30 for n in kinds['neon'])
-      and (prices['bloom-bar'], prices['pedestals'], prices['sweets-cart']) == (None, 200, 5.95),
-      f'catalog prices are the owner’s: walls $299, neon $30, pillars $200 (set of 5), sweets cart $5.95, bloom bar on request: {prices}')
+      and (prices['bloom-bar'], prices['pedestals'], prices['sweets-cart']) == (None, 120, 5.95),
+      f'catalog prices are the owner’s: walls $299, neon $30, pillars from $120, sweets cart $5.95, bloom bar on request: {prices}')
 check([i for i, _, _, pp in catalog if pp] == ['sweets-cart'], 'only the sweets cart is priced per person')
 sets = [(r[0], r[1], float(r[2])) for r in x('select item_id, size, price from public.item_sets order by 1, 2').fetchall()]
 check(sets == [('pedestals', 3, 120.0), ('pedestals', 5, 200.0)], f'pillars come as a set of 3 ($120) or 5 ($200): {sets}')
@@ -592,7 +592,7 @@ for args, want, why in [
     ((['garden-wall'],), 299, 'one wall'),
     ((['garden-wall', 'neon-engaged'],), 329, 'a wall and a neon sign'),
     ((['garden-wall', 'garden-wall', 'nope'], ['pkg-nope']), 299, 'duplicates count once; unknown items and packages are ignored'),
-    ((['pedestals'],), 200, 'pillars without a set size are priced as the set of 5'),
+    ((['pedestals'],), 120, 'pillars without a set size are priced as the set of 3'),
     ((['pedestals'], [], None, 3), 120, 'a set of 3 pillars is $120'),
     ((['pedestals'], [], None, 5), 200, 'a set of 5 pillars is $200'),
     ((['sweets-cart'], [], 100), 595, 'the sweets cart for 100 guests is $595'),
@@ -644,6 +644,7 @@ check('neon-just-married' in busy, f'a requested neon sign shows as busy to visi
 e = expect_error(lambda: req(name='Late Fan', email='late@example.com', date='2027-11-10', start='20:00', end='23:00', items=['neon-just-married']), '23P01',
                  'the same neon sign can’t be booked twice at once')
 check(e is not None and e.diag.message_detail == 'neon-just-married', 'and the refusal names the sign')
+req(name='No Set Fan', email='noset@example.com', date='2027-11-24', start='12:00', end='16:00', items=['pedestals'])
 check(req(name='Other Sign', email='other@example.com', date='2027-11-10', start='20:00', end='23:00', items=['neon-engaged']).get('hold_until') is not None,
       'a different sign at the same time is fine')
 expect_error(lambda: req(name='Made Up', email='madeup@example.com', date='2027-11-13', start='12:00', end='13:00', items=['neon-made-up']), '22023',
@@ -654,12 +655,13 @@ e = expect_error(lambda: req(name='Second Set', email='second@example.com', date
                  'with 5 pillars, a second set can’t go out at the same time')
 x('reset role')
 rows = {r[0]: (None if r[1] is None else float(r[1]), r[2], r[3]) for r in x(
-    "select c.email, b.price, b.packages, b.pillar_set from bookings b join customers c on c.id = b.customer_id where b.source = 'website' and c.email in ('neon@example.com', 'package@example.com', 'pillar@example.com', 'sweet@example.com', 'bloom@example.com')").fetchall()}
+    "select c.email, b.price, b.packages, b.pillar_set from bookings b join customers c on c.id = b.customer_id where b.source = 'website' and c.email in ('neon@example.com', 'package@example.com', 'pillar@example.com', 'sweet@example.com', 'bloom@example.com', 'noset@example.com')").fetchall()}
 check(rows.get('neon@example.com') == (329.0, [], None), f'a request is priced from its items: {rows.get("neon@example.com")}')
 check(rows.get('package@example.com') == (300.0, ['pkg-wall-neon'], None), f'a package request keeps its package and saving: {rows.get("package@example.com")}')
 check(rows.get('pillar@example.com') == (419.0, [], 3), f'a pillar request keeps its set and is priced for it: {rows.get("pillar@example.com")}')
 check(rows.get('sweet@example.com') == (595.0, [], None), f'the sweets cart is priced for the guests, and a set size without pillars is dropped: {rows.get("sweet@example.com")}')
 check(rows.get('bloom@example.com') == (None, [], None), f'a request with the bloom bar is left for her to price: {rows.get("bloom@example.com")}')
+check(rows.get('noset@example.com') == (120.0, [], 3), f'pillars requested without a set are the set of 3: {rows.get("noset@example.com")}')
 check(x("select private.item_names('{neon-engaged,ivory-wall}')").fetchone()[0] == 'Ivory flower wall and Engaged neon sign', 'item names come from the catalog, in catalog order')
 x('begin')
 def unknown_item():

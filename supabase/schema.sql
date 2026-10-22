@@ -62,7 +62,7 @@ insert into public.items (id, name, kind, price, per_person, sort) values
   ('pink-ombre-wall', 'Pink ombre wall', 'wall', 299, false, 3), ('red-rose-wall', 'Red rose wall', 'wall', 299, false, 4),
   ('champagne-wall', 'Champagne rose wall', 'wall', 299, false, 5), ('greenery-wall', 'Greenery wall', 'wall', 299, false, 6),
   ('ivory-texture-wall', 'Ivory textured wall', 'wall', 299, false, 7),
-  ('bloom-bar', 'Bloom bar', 'extra', null, false, 8), ('pedestals', 'White cylinder pillars', 'extra', 200, false, 9),
+  ('bloom-bar', 'Bloom bar', 'extra', null, false, 8), ('pedestals', 'White cylinder pillars', 'extra', 120, false, 9),
   ('sweets-cart', 'Sweets cart', 'extra', 5.95, true, 10),
   ('neon-mr-and-mrs', 'Mr. & Mrs. neon sign', 'neon', 30, false, 11), ('neon-happy-birthday', 'Happy Birthday neon sign', 'neon', 30, false, 12),
   ('neon-christening-day', 'Christening Day neon sign', 'neon', 30, false, 13), ('neon-congratulations', 'Congratulations neon sign', 'neon', 30, false, 14),
@@ -71,8 +71,8 @@ insert into public.items (id, name, kind, price, per_person, sort) values
   ('neon-congrats', 'Congrats neon sign', 'neon', 30, false, 19)
 on conflict (id) do update set name = excluded.name, kind = excluded.kind, per_person = excluded.per_person, sort = excluded.sort;
 
--- Items rented in sets of different sizes, priced by the size booked. There are 5 white pillars, so a booking
--- takes a set of 3 or of 5 and the pillars are held as one item either way.
+-- Items rented in sets of different sizes, priced by the size booked (items.price is the smallest set's). There are
+-- 5 white pillars, so a booking takes a set of 3 or of 5 (3 when none is given) and the pillars are held as one item.
 create table if not exists public.item_sets (
   item_id text not null references public.items,
   size int not null check (size between 1 and 100),
@@ -302,7 +302,7 @@ declare
   v_packages text[] := array(select p.id from public.packages p
     where p.id in (select jsonb_array_elements_text(coalesce(b -> 'packages', '[]'::jsonb))) order by p.sort);
   v_guests int := nullif(b ->> 'guests', '')::int;
-  v_pillar_set int := case when 'pedestals' = any (v_items) then nullif(b ->> 'pillar_set', '')::int end;
+  v_pillar_set int := case when 'pedestals' = any (v_items) then coalesce(nullif(b ->> 'pillar_set', '')::int, 3) end;
   v_price numeric;
   v_start timestamptz;
   v_end timestamptz;
@@ -486,7 +486,7 @@ begin
     v_items := array(select distinct jsonb_array_elements_text(coalesce(r -> 'items', '[]'::jsonb)));
     v_packages := array(select p.id from public.packages p
       where p.id in (select jsonb_array_elements_text(coalesce(r -> 'packages', '[]'::jsonb))) order by p.sort);
-    v_pillar_set := case when 'pedestals' = any (v_items) then nullif(r ->> 'pillar_set', '')::int end;
+    v_pillar_set := case when 'pedestals' = any (v_items) then coalesce(nullif(r ->> 'pillar_set', '')::int, 3) end;
   exception when others then
     raise exception 'invalid_request' using errcode = '22023';
   end;
